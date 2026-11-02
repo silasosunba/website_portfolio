@@ -22,7 +22,7 @@ No service-role key, database password, or secret key is required by this applic
 Back up your existing database before applying schema changes. In the Supabase SQL Editor:
 
 1. Run `005_portfolio_cms.sql`. It is self-contained for a fresh project and also supports databases created by migrations 001–004. It creates four tables, private image storage, owner policies, version triggers, and supporting indexes. Existing Books rows are copied with their IDs, notes, reading states, order, and publication status. The old `portfolio_content` table is retained but API grants are revoked to prevent split writes.
-2. Run `006_initial_content.sql`. It imports the current 19 News entries, 8 Projects, and 1 Medium article. Matching seed keys are never overwritten. This is initial migration content, not a public-page fallback. Do not re-run it to update content after you begin managing entries; a deleted seeded entry could be re-created.
+2. For a new database, run `006_initial_content.sql`. It contains a retained snapshot of 20 News entries, 8 Projects, and 1 Medium article. Matching seed keys are never overwritten. This is initial migration content, not a public-page fallback or a backup of subsequent CMS edits. Do not re-run it to update content after you begin managing entries; a deleted seeded entry could be re-created. Manage ongoing content through `/admin`.
 3. If you already have a row in `portfolio_owner`, keep it. Otherwise create your email/password account under Authentication → Users, confirm it, and register its UUID:
 
 ```sql
@@ -66,11 +66,8 @@ npm run build
 
 The test suite checks content validation, migration preservation/idempotency, and PostgreSQL RLS with owner/non-owner/anonymous identities. The embedded PostgreSQL tests emulate the Supabase Auth/Storage schemas; they do not test the hosted Supabase Auth and Storage HTTP services. Before launch, verify real owner login, rejected non-owner access, draft privacy, image upload, publication, unpublication, and cross-tab version conflicts in a staging Supabase project.
 
-Generate the initial SQL from the retained migration data files only when preparing a new initial migration:
+`006_initial_content.sql` is retained for initial database setup and migration tests. The original TypeScript seed data and generator have been removed; live content is managed through the CMS. Back up Supabase to preserve changes made after the initial snapshot.
 
-```sh
-npm run seed:generate
-```
 ## Password recovery
 
 The recovery email contains a link, not a replacement password. Use **Forgot your password?** at `/admin/login`, or visit `/admin/reset-password`.

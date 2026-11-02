@@ -49,14 +49,14 @@ test('CMS migrations, ownership policies, and private media work in PostgreSQL',
       assert.equal(rows[0].status, 'completed');
       assert.equal(rows[0].published, true);
       assert.equal(rows[0].position, 7);
-      for (const [table, count] of [['news', 19], ['projects', 8], ['articles', 1]]) assert.equal((await db.query(`select count(*)::int n from portfolio_${table}`)).rows[0].n, count);
+      for (const [table, count] of [['news', 20], ['projects', 8], ['articles', 1]]) assert.equal((await db.query(`select count(*)::int n from portfolio_${table}`)).rows[0].n, count);
     });
     await t.test('re-running migrations and seeds does not duplicate or overwrite edited content', async () => {
       await db.query("update portfolio_news set title = 'Owner changed title' where seed_key = 'news-condere'");
       await db.exec(await readSql('005_portfolio_cms.sql'));
       await db.exec(await readSql('006_initial_content.sql'));
       assert.equal((await db.query("select title from portfolio_news where seed_key = 'news-condere'")).rows[0].title, 'Owner changed title');
-      assert.equal((await db.query('select count(*)::int n from portfolio_news')).rows[0].n, 19);
+      assert.equal((await db.query('select count(*)::int n from portfolio_news')).rows[0].n, 20);
     });
     await t.test('anonymous and non-owner accounts can only read published content and cannot write', async () => {
       await db.query("insert into portfolio_news (title,date_label,date_value,body,published) values ('Private news','Oct 2026','2026-10',$1,false)", [newsBody]);
