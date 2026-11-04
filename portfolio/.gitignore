@@ -26,3 +26,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cloudflare build output, local state, and environment values
+.open-next/
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
