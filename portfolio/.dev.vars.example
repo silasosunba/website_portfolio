@@ -1,0 +1,3 @@
+# Copy to .dev.vars for a local Workers preview; never commit .dev.vars.
+# OpenNext loads .env.development/.env.local when this is development.
+NEXTJS_ENV=development

@@ -7,7 +7,7 @@ import RecoveryRedirect from "../components/admin/RecoveryRedirect";
 import "../index.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://osunbasilasdev.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: { default: "Silas Osunba | Research Engineer & Applied AI Engineer", template: "%s | Silas Osunba" },
   description: "Silas Osunba — machine learning engineer and researcher building intelligent, energy-aware systems. Explore selected projects, research, and technical writing.",
   icons: { icon: "/images/identity-image.png" },
