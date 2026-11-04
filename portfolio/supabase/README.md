@@ -27,7 +27,8 @@ Back up your existing database before applying schema changes. In the Supabase S
 
 1. Run `005_portfolio_cms.sql`. It is self-contained for a fresh project and also supports databases created by migrations 001–004. It creates four tables, private image storage, owner policies, version triggers, and supporting indexes. Existing Books rows are copied with their IDs, notes, reading states, order, and publication status. The old `portfolio_content` table is retained but API grants are revoked to prevent split writes.
 2. For a new database, run `006_initial_content.sql`. It contains a retained snapshot of 20 News entries, 8 Projects, and 1 Medium article. Matching seed keys are never overwritten. This is initial migration content, not a public-page fallback or a backup of subsequent CMS edits. Do not re-run it to update content after you begin managing entries; a deleted seeded entry could be re-created. Manage ongoing content through `/admin`.
-3. If you already have a row in `portfolio_owner`, keep it. Otherwise create your email/password account under Authentication → Users, confirm it, and register its UUID:
+3. Run `007_content_ordering.sql` to enable atomic drag-to-reorder, insertion, and deletion with automatic numbering. Existing installations need only this new migration; do not re-run the seed.
+4. If you already have a row in `portfolio_owner`, keep it. Otherwise create your email/password account under Authentication → Users, confirm it, and register its UUID:
 
 ```sql
 insert into public.portfolio_owner (singleton, user_id)
@@ -43,7 +44,9 @@ Migration 005 never deletes legacy data. External HTTP image/book links from leg
 Open `/admin` and sign in at `/admin/login`. Choose News, Projects, Articles, or Books.
 
 - Save as a draft or publish. Uncheck Published and save to unpublish.
-- Use Display order to reorder entries (lower numbers appear first).
+- Drag an entry by its grip to reorder it (mouse or touch). Use the up/down buttons or focus the grip and press arrow keys for keyboard access. Drop to save automatically; Escape cancels an active drag.
+- New entries default to position 0. Choose an insertion position in the editor if needed; an occupied position shifts following entries down. Saving, reordering, and deleting renumber the section from 0 without gaps. Drafts participate in the same order; public pages show only published entries.
+- Migration 007 performs each mutation and all position updates in a single PostgreSQL transaction. It verifies owner access, retains RLS, serializes writes per section, and checks the complete list of IDs/versions to reject stale tabs. The dashboard receives the updated list and versions after every successful mutation. A failed transaction leaves the database unchanged; a lost response needs a reload before retrying.
 - News uses paragraphs of text/link segments, with optional bold and italics. It is stored as validated versioned JSON and rendered as React elements, never raw HTML.
 - Articles store the title, excerpt, date, cover, reading time, and Medium URL; full article authoring remains on Medium.
 - Upload a PNG, JPEG, WebP, or GIF up to 5 MB, or use an existing HTTPS image URL / `/images/` path. Uploaded media bytes and MIME types are checked on the server. SVG and HTML uploads are rejected.

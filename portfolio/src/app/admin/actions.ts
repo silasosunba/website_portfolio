@@ -30,7 +30,7 @@ export async function signOut() {
   await client.auth.signOut();
   redirect('/admin/login');
 }
-export async function saveContent(kind: ContentKind, input: unknown): Promise<ActionResult<ContentRecord>> {
+export async function saveContent(kind: ContentKind, input: unknown, expected: OrderSnapshot): Promise<ActionResult<ContentRecord[]>> {
   try {
     const { client, user } = await requireOwner();
     if (!isContentKind(kind)) throw new Error('Unknown content section.');
@@ -44,27 +44,38 @@ export async function saveContent(kind: ContentKind, input: unknown): Promise<Ac
       if (readError || !existing) throw new Error('Could not verify the existing image. Reload the entry and try again.');
       if (existing.image_url !== values.image_url) throw new Error('Upload an image file to replace the current image.');
     }
-    let query;
-    if (raw.id !== undefined) {
-      if (!isUuid(raw.id) || !Number.isSafeInteger(raw.version) || Number(raw.version) < 1) throw new Error('Invalid record version. Reload this entry.');
-      query = client.from(contentTables[kind]).update(values).eq('id', raw.id).eq('version', raw.version);
-    } else query = client.from(contentTables[kind]).insert(values);
-    const { data, error } = await query.select().maybeSingle();
-    if (error) throw new Error('Could not save. Check your connection and database setup; your edits have been kept.');
-    if (!data) throw new Error('This entry changed in another tab or was deleted. Reload it before saving again.');
+    if (raw.id !== undefined && (!isUuid(raw.id) || !Number.isSafeInteger(raw.version) || Number(raw.version) < 1)) throw new Error('Invalid record version. Reload this entry.');
+    if (raw.id !== undefined && (!Array.isArray(expected) || !expected.some(entry => entry.id === raw.id && entry.version === raw.version))) throw new Error('This entry changed. Reload it before saving again.');
+    const data = await mutateOrdered(client, kind, 'save', expected, { p_values: values, p_id: raw.id ?? null });
     invalidate(kind);
-    return { ok: true, data: data as ContentRecord };
+    return { ok: true, data: data as ContentRecord[] };
   } catch (error) { return failure(error); }
 }
-export async function deleteContent(kind: ContentKind, id: string, version: number): Promise<ActionResult> {
+type OrderSnapshot = { id: string; version: number }[];
+async function mutateOrdered(client: Awaited<ReturnType<typeof sessionClient>>, kind: ContentKind, operation: string, expected: OrderSnapshot, options: Record<string, unknown> = {}): Promise<ContentRecord[]> {
+  if (!Array.isArray(expected) || expected.some(entry => !entry || !isUuid(entry.id) || !Number.isSafeInteger(entry.version) || entry.version < 1) || new Set(expected.map(entry => entry.id)).size !== expected.length) throw new Error('Invalid list snapshot. Reload the dashboard.');
+  const { data, error } = await client.rpc('portfolio_mutate_ordered', { p_kind: kind, p_operation: operation, p_expected: expected, ...options });
+  if (error?.code === '40001') throw new Error('Content changed in another tab. Reload the dashboard before trying again.');
+  if (error?.code === 'PGRST202' || error?.code === '42883') throw new Error('Apply 007_content_ordering.sql in Supabase SQL Editor, then reload the dashboard.');
+  if (error || !Array.isArray(data)) throw new Error('Could not save the list. Check your connection and database setup. No partial order was saved.');
+  return data as ContentRecord[];
+}
+export async function deleteContent(kind: ContentKind, id: string, expected: OrderSnapshot): Promise<ActionResult<ContentRecord[]>> {
   try {
     const { client } = await requireOwner();
-    if (!isContentKind(kind) || !isUuid(id) || !Number.isSafeInteger(version)) throw new Error('Invalid entry.');
-    const { data, error } = await client.from(contentTables[kind]).delete().eq('id', id).eq('version', version).select('id').maybeSingle();
-    if (error) throw new Error('Could not delete this entry. Please try again.');
-    if (!data) throw new Error('This entry changed in another tab or was deleted. Reload the list.');
+    if (!isContentKind(kind) || !isUuid(id)) throw new Error('Invalid entry.');
+    const data = await mutateOrdered(client, kind, 'delete', expected, { p_id: id });
     invalidate(kind);
-    return { ok: true, data: undefined };
+    return { ok: true, data };
+  } catch (error) { return failure(error); }
+}
+export async function reorderContent(kind: ContentKind, ids: string[], expected: OrderSnapshot): Promise<ActionResult<ContentRecord[]>> {
+  try {
+    const { client } = await requireOwner();
+    if (!isContentKind(kind) || !Array.isArray(ids) || ids.some(id => !isUuid(id)) || new Set(ids).size !== ids.length) throw new Error('Invalid entry order.');
+    const data = await mutateOrdered(client, kind, 'reorder', expected, { p_order: ids });
+    invalidate(kind);
+    return { ok: true, data };
   } catch (error) { return failure(error); }
 }
 export async function uploadImage(form: FormData): Promise<ActionResult<{ path: string }>> {

@@ -32,6 +32,7 @@ async function setup() {
   await db.query("insert into public.portfolio_content (id,kind,title,body,author,date,status,published,position) values ($1,'book','Existing book','My existing notes','Author','Oct 2026','completed',true,7)", [oldBook]);
   await db.exec(await readSql('005_portfolio_cms.sql'));
   await db.exec(await readSql('006_initial_content.sql'));
+  await db.exec(await readSql('007_content_ordering.sql'));
   return db;
 }
 async function asRole(db, role, user, fn) {
@@ -115,6 +116,98 @@ test('CMS migrations, ownership policies, and private media work in PostgreSQL',
       }
       assert.equal((await db.query("select public from storage.buckets where id='portfolio-media'")).rows[0].public, false);
       await asRole(db, 'authenticated', owner, async () => assert.equal((await db.query('delete from storage.objects returning id')).rows.length, 1));
+    });
+  } finally { await db.close(); }
+});
+
+
+test('ordered CMS mutations are atomic, owner-only, and detect stale lists', async t => {
+  const db = await setup();
+  const entries = async kind => (await db.query(`select coalesce(jsonb_agg(to_jsonb(t) order by position,created_at desc,id),'[]'::jsonb) as entries from portfolio_${kind} t`)).rows[0].entries;
+  const snapshot = rows => rows.map(({ id, version }) => ({ id, version }));
+  const mutate = async (kind, operation, rows, values = {}, id = null, order = null) =>
+    (await db.query('select public.portfolio_mutate_ordered($1,$2,$3::jsonb,$4::jsonb,$5::uuid,$6::uuid[]) as entries',
+      [kind, operation, JSON.stringify(snapshot(rows)), JSON.stringify(values), id, order])).rows[0].entries;
+  const contiguous = rows => assert.deepEqual(rows.map(row => row.position), rows.map((_, i) => i));
+  try {
+    await t.test('migration can be rerun without changing any content', async () => {
+      const before = await entries('news');
+      await db.exec(await readSql('007_content_ordering.sql'));
+      assert.deepEqual(await entries('news'), before);
+    });
+    await t.test('insertion, edits, reorder, deletion, and appending work in all four sections', async () => {
+      await asRole(db, 'authenticated', owner, async () => {
+        for (const kind of ['news','projects','articles','books']) {
+          const before = await entries(kind);
+          const { id: _id, seed_key: _seed, version: _version, created_at: _created, updated_at: _updated, ...values } = before[0];
+          const target = Math.min(3, before.length);
+          const created = await mutate(kind, 'save', before, { ...values, title: `Inserted ${kind}`, published: false, position: target });
+          contiguous(created);
+          const inserted = created[target];
+          assert.equal(inserted.title, `Inserted ${kind}`);
+          assert.equal(inserted.published, false);
+          assert.deepEqual(created.filter(row => row.id !== inserted.id).map(row => row.id), before.map(row => row.id));
+          assert.equal((await entries(kind)).find(row => row.id === before[0].id).published, before[0].published);
+          const edited = await mutate(kind, 'save', created, { ...values, title: 'Edited and moved', position: 0 }, inserted.id);
+          contiguous(edited);
+          assert.equal(edited[0].id, inserted.id);
+          assert.ok(edited[0].version > inserted.version);
+          const reversed = await mutate(kind, 'reorder', edited, {}, null, edited.map(row => row.id).reverse());
+          contiguous(reversed);
+          assert.deepEqual(reversed.map(row => row.id), edited.map(row => row.id).reverse());
+          assert.deepEqual(await entries(kind), reversed);
+          const unchanged = await mutate(kind, 'reorder', reversed, {}, null, reversed.map(row => row.id));
+          assert.deepEqual(unchanged, reversed);
+          const deleted = await mutate(kind, 'delete', reversed, {}, inserted.id);
+          contiguous(deleted);
+          assert.equal(deleted.length, before.length);
+          assert.ok(!deleted.some(row => row.id === inserted.id));
+          const appended = await mutate(kind, 'save', deleted, { ...values, title: 'Appended', position: 1000000 });
+          contiguous(appended);
+          assert.equal(appended.at(-1).title, 'Appended');
+        }
+      });
+    });
+    await t.test('reorders and saves from stale tabs do not overwrite newer content', async () => {
+      await asRole(db, 'authenticated', owner, async () => {
+        const stale = await entries('books');
+        await db.query('update portfolio_books set title=$1 where id=$2', ['Changed in another tab', stale[0].id]);
+        const current = await entries('books');
+        for (const operation of ['reorder','delete','save']) {
+          await assert.rejects(mutate('books', operation, stale, { title: 'Stale edit', position: 0 }, stale[0].id, stale.map(row => row.id)), /changed in another tab/);
+          assert.deepEqual(await entries('books'), current);
+        }
+      });
+    });
+    await t.test('invalid permutations, protected columns, and failed constraints roll back the entire operation', async () => {
+      await asRole(db, 'authenticated', owner, async () => {
+        const before = await entries('books');
+        for (const ids of [before.slice(1).map(row => row.id), before.map(() => before[0].id), [...before.map(row => row.id), stranger]]) {
+          await assert.rejects(mutate('books', 'reorder', before, {}, null, ids), /Invalid entry order/);
+          assert.deepEqual(await entries('books'), before);
+        }
+        await assert.rejects(mutate('books', 'save', before, { title: 'Bad', position: 0, version: 999 }), /Invalid content fields/);
+        await assert.rejects(mutate('books', 'save', before, { title: '', position: 0 }), /check constraint/);
+        assert.deepEqual(await entries('books'), before);
+      });
+    });
+    await t.test('anonymous visitors and non-owner accounts cannot invoke ordered mutations', async () => {
+      const before = await entries('news');
+      for (const [role, user] of [['anon', null], ['authenticated', stranger]]) {
+        await asRole(db, role, user, async () => {
+          await assert.rejects(mutate('news', 'reorder', before, {}, null, before.map(row => row.id).reverse()), /permission denied|Owner access required/);
+        });
+        assert.deepEqual(await entries('news'), before);
+      }
+    });
+    await t.test('an empty section supports reorder, first insertion and final deletion', async () => {
+      await asRole(db, 'authenticated', owner, async () => {
+        await db.query('delete from portfolio_books');
+        assert.deepEqual(await mutate('books', 'reorder', [], {}, null, []), []);
+        const created = await mutate('books', 'save', [], { title: 'First book', position: 0 });
+        assert.equal(created[0].position, 0);
+        assert.deepEqual(await mutate('books', 'delete', created, {}, created[0].id), []);
+      });
     });
   } finally { await db.close(); }
 });

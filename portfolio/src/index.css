@@ -696,3 +696,18 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (max-width: 1279px) {
   .admin-entry-list li .admin-toolbar > .admin-entry-action-delete { margin-left: auto; }
 }
+
+/* Ordered CMS entries: touch gestures belong to the grip, not the whole card. */
+.admin-order-help { margin-block: 12px; }
+.admin-entry-order-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.admin-order-controls { display: flex; gap: 4px; flex-shrink: 0; }
+.admin-order-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-line); border-radius: 6px; }
+.admin-order-button:hover { background: #0f766e10; border-color: var(--color-accent); }
+.admin-order-button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.admin-order-button:disabled { opacity: .35; cursor: not-allowed; }
+.admin-drag-handle { cursor: grab; touch-action: none; user-select: none; }
+.admin-entry-dragging { box-shadow: 0 8px 24px #0002; outline: 2px solid var(--color-accent); background: var(--color-canvas); }
+.admin-entry-dragging .admin-drag-handle { cursor: grabbing; }
+.dark .admin-order-button { border-color: var(--color-line-dark); }
+.dark .admin-order-button:hover { border-color: var(--color-gold); background: #c4a57412; }
+.dark .admin-entry-dragging { background: var(--color-surface-dark); outline-color: var(--color-gold); }

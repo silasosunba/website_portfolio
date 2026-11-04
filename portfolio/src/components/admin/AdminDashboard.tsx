@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { deleteContent, saveContent, signOut, uploadImage } from '../../app/admin/actions';
+import { deleteContent, reorderContent, saveContent, signOut, uploadImage } from '../../app/admin/actions';
 import { contentKinds, contentLabels, emptyDraft, imageFor, MAX_IMAGE_BYTES, validateContent, type ArticleRecord, type BookRecord, type ContentKind, type ContentRecord, type NewsBody, type NewsRecord, type ProjectRecord } from '../../lib/cms/model';
 import { ArticleList, BookList, NewsList, ProjectList } from '../content/ContentLists';
-import { FaPen, FaRegTrashAlt, FaCloudUploadAlt, FaSignOutAlt } from 'react-icons/fa';
+import { FaCloudUploadAlt, FaSignOutAlt } from 'react-icons/fa';
 import NewsEditor from './NewsEditor';
+import OrderedEntryList from './OrderedEntryList';
 import ConfirmationDialog from './ConfirmationDialog';
 import ContentPreview from './ContentPreview';
 import EntryEditorDialog from './EntryEditorDialog';
@@ -28,6 +29,9 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
   const [discardError, setDiscardError] = useState('');
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const locked = busy || dragging;
+  const snapshot = (section: ContentKind) => records[section].map(({ id, version }) => ({ id, version }));
   const [message, setMessage] = useState('');
   const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: ContentKind; record: ContentRecord } | null>(null);
@@ -42,7 +46,7 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
   }, [dirty]);
   function change(patch: Draft) { setDraft(previous => ({ ...previous, ...patch })); setDirty(true); setPreview(null); setPreviewError(''); }
   function applySelection(next: ContentKind, record?: ContentRecord, openEditor = true) {
-    setSaveNotice(null); setEditorOpen(openEditor); setKind(next); setDraft(record ? { ...record } : emptyDraft(next)); setDirty(false); setPreview(null); setPreviewError(''); setMessage('');
+    setSaveNotice(null); setEditorOpen(openEditor); setKind(next); setDraft(record ? { ...record, position: records[next].findIndex(entry => entry.id === record.id) } : emptyDraft(next)); setDirty(false); setPreview(null); setPreviewError(''); setMessage('');
   }
   function select(next: ContentKind, record?: ContentRecord, openEditor = true) {
     if (dirty) { setDiscardError(''); setPendingAction({ type: 'select', kind: next, record, openEditor }); }
@@ -74,15 +78,14 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
     setBusy(true); setMessage('');
     setSaveNotice({ status: 'saving', title: draft.published ? 'Saving and publishing…' : 'Saving draft…', description: 'Please wait while your changes are saved.' });
     try {
-      const result = await saveContent(kind, draft);
+      const result = await saveContent(kind, draft, snapshot(kind));
       if (!result.ok) {
         setSaveNotice({ status: 'error', title: 'Could not save your changes', description: `${result.error} Your edits are still in the form.` });
         return;
       }
-      const saved = result.data;
-      setRecords(previous => ({ ...previous, [kind]: [...previous[kind].filter(entry => entry.id !== saved.id), saved].sort((a, b) => a.position - b.position || b.created_at.localeCompare(a.created_at)) }));
-      setEditorOpen(false); setDraft({ ...saved }); setDirty(false); setPreview(null);
-      setSaveNotice({ status: 'success', title: saved.published ? 'Saved and published successfully' : 'Draft saved successfully', description: saved.published ? 'Your changes are saved and available on the public page.' : 'Your changes are saved privately. Only you can see this draft.' });
+      setRecords(previous => ({ ...previous, [kind]: result.data }));
+      setEditorOpen(false); setDraft(emptyDraft(kind)); setDirty(false); setPreview(null);
+      setSaveNotice({ status: 'success', title: draft.published ? 'Saved and published successfully' : 'Draft saved successfully', description: draft.published ? 'Your changes are saved and available on the public page.' : 'Your changes are saved privately. Only you can see this draft.' });
     } catch {
       setSaveNotice({ status: 'error', title: 'Save could not be confirmed', description: 'The connection was interrupted. Your edits are still in the form. Check your connection and try again. If the entry changed, reload it before retrying.' });
     } finally { setBusy(false); }
@@ -92,13 +95,26 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
     const { kind: targetKind, record } = deleteTarget;
     setBusy(true); setMessage(''); setDeleteError('');
     try {
-      const result = await deleteContent(targetKind, record.id, record.version);
+      const result = await deleteContent(targetKind, record.id, snapshot(targetKind));
       if (!result.ok) { setDeleteError(result.error); return; }
-      setRecords(previous => ({ ...previous, [targetKind]: previous[targetKind].filter(entry => entry.id !== record.id) }));
+      setRecords(previous => ({ ...previous, [targetKind]: result.data }));
       if (draft.id === record.id) { setDraft(emptyDraft(kind)); setDirty(false); setPreview(null); }
       setDeleteTarget(null); setMessage('Entry deleted.');
     } catch { setDeleteError('Could not delete. Please check the connection and try again.'); }
     finally { setBusy(false); }
+  }
+  async function reorder(ids: string[]) {
+    if (busy || setupError) return;
+    setBusy(true);
+    setSaveNotice({ status: 'saving', title: 'Saving order…', description: 'Updating entry positions.' });
+    try {
+      const result = await reorderContent(kind, ids, snapshot(kind));
+      if (!result.ok) { setSaveNotice({ status: 'error', title: 'Could not save order', description: result.error }); return; }
+      setRecords(previous => ({ ...previous, [kind]: result.data }));
+      setSaveNotice({ status: 'success', title: 'Order saved', description: 'Entry positions have been updated on the public page.' });
+    } catch {
+      setSaveNotice({ status: 'error', title: 'Order could not be confirmed', description: 'Check your connection, then reload the dashboard before retrying.' });
+    } finally { setBusy(false); }
   }
   async function upload(file?: File) {
     if (!file) return;
@@ -116,14 +132,14 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
   const area = (name: string, label: string, max: number) => <label className="admin-field">{label}<textarea rows={5} value={String(draft[name] ?? '')} maxLength={max} onChange={e => change({ [name]: e.target.value })} /></label>;
   const selectedImage = imageFor({ image_path: String(draft.image_path ?? ''), image_url: String(draft.image_url ?? '') });
   return <div className="admin-page page-shell">
-    <header className="admin-dashboard-header mb-6"><div className="admin-dashboard-heading"><h1 className="page-title">Your portfolio</h1><p className="admin-help">Create, preview, and publish your updates.</p></div><form className="admin-signout" onSubmit={event => { event.preventDefault(); if (dirty) { setDiscardError(''); setPendingAction({ type: 'signout' }); } else { void leaveDashboard(); } }}><button className="btn-secondary" disabled={busy}><FaSignOutAlt aria-hidden="true" />Sign out</button></form></header>
+    <header className="admin-dashboard-header mb-6"><div className="admin-dashboard-heading"><h1 className="page-title">Your portfolio</h1><p className="admin-help">Create, preview, and publish your updates.</p></div><form className="admin-signout" onSubmit={event => { event.preventDefault(); if (dirty) { setDiscardError(''); setPendingAction({ type: 'signout' }); } else { void leaveDashboard(); } }}><button className="btn-secondary" disabled={locked}><FaSignOutAlt aria-hidden="true" />Sign out</button></form></header>
     {setupError && <p role="alert" className="admin-message">Database setup is incomplete or unavailable. Apply migration 005_portfolio_cms.sql, then reload. Editing is disabled until all four tables can be read.</p>}
-    <nav className="admin-sections" aria-label="Content sections">{contentKinds.map(section => <button type="button" key={section} aria-pressed={kind === section} disabled={busy} onClick={() => select(section, undefined, false)}>{contentLabels[section]} <span>{records[section].length}</span></button>)}</nav>
+    <nav className="admin-sections" aria-label="Content sections">{contentKinds.map(section => <button type="button" key={section} aria-pressed={kind === section} disabled={locked} onClick={() => select(section, undefined, false)}>{contentLabels[section]} <span>{records[section].length}</span></button>)}</nav>
     {message && <p role="status" className="admin-message">{message}</p>}
     <div className="admin-workspace">
-      <section className="admin-entry-list"><div className="admin-toolbar"><h2 className="content-title">{contentLabels[kind]}</h2><button className="btn-secondary" type="button" disabled={busy || setupError} onClick={() => select(kind)}>New entry</button></div>
+      <section className="admin-entry-list"><div className="admin-toolbar"><h2 className="content-title">{contentLabels[kind]}</h2><button className="btn-secondary" type="button" disabled={locked || setupError} onClick={() => select(kind)}>New entry</button></div>
         {!records[kind].length && <p className="admin-help mt-4">No entries yet. Create a draft to get started.</p>}
-        <ul>{records[kind].map(record => <li key={record.id} className={editorOpen && draft.id === record.id ? 'selected' : ''}><span className="admin-help">{record.published ? 'Published' : 'Draft'} · Order {record.position}</span><h3>{record.title}</h3><div className="admin-toolbar"><button type="button" className="admin-entry-action" aria-label={`Edit ${record.title}`} disabled={busy || setupError} onClick={() => select(kind, record)}><FaPen aria-hidden="true" />Edit</button><button type="button" className="admin-entry-action admin-entry-action-delete" aria-label={`Delete ${record.title}`} disabled={busy || setupError} onClick={() => { setDeleteError(''); setDeleteTarget({ kind, record }); }}><FaRegTrashAlt aria-hidden="true" />Delete</button></div></li>)}</ul>
+        <OrderedEntryList key={kind} records={records[kind]} disabled={busy || setupError} onDraggingChange={setDragging} onReorder={reorder} onEdit={record => select(kind, record)} onDelete={record => { setDeleteError(''); setDeleteTarget({ kind, record }); }} />
       </section>
     </div>
     {editorOpen && <EntryEditorDialog title={`${draft.id ? 'Edit' : 'New'} ${contentLabels[kind].toLowerCase()} entry`} busy={busy} onClose={closeEditor}>
@@ -140,7 +156,7 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
           <span className="admin-upload-icon"><FaCloudUploadAlt aria-hidden="true" /></span>
           <span><span className="admin-upload-label">{selectedImage ? 'Choose replacement image' : 'Choose image'}</span><span id="upload-formats" className="admin-help admin-upload-formats">PNG, JPEG, WebP, or GIF · Up to 5 MB</span></span>
         </label>{selectedImage && <><img src={selectedImage} alt="Selected cover" className="admin-image-preview" /><button type="button" className="btn-secondary" onClick={() => change({ image_path: '', image_url: '' })}>Remove from entry</button></>}<p className="admin-help">Upload a file to add or replace an image. Uploads are private until attached to a published entry.</p></fieldset>}
-        <label className="admin-field">Display order (lower numbers first)<input type="number" min={-1000000} max={1000000} step={1} value={Number(draft.position)} required onChange={e => change({ position: Number(e.target.value) })} /></label>
+        <label className="admin-field">Insert at position (0 is first; other entries shift automatically)<input type="number" min={0} max={Math.max(0, records[kind].length - (draft.id ? 1 : 0))} step={1} value={Number(draft.position)} required onChange={e => change({ position: Number(e.target.value) })} /></label>
         <label className="admin-publish"><input type="checkbox" checked={Boolean(draft.published)} onChange={e => change({ published: e.target.checked })} /> Published — visible to everyone</label>
         <div className="admin-toolbar"><button className="btn-primary">{busy ? 'Working…' : draft.published ? 'Save and publish' : 'Save draft'}</button><button type="button" className="btn-secondary" aria-describedby={previewError ? 'preview-error' : undefined} onClick={() => { try { const values = validateContent(kind, draft); setPreview({ ...values, id: String(draft.id ?? 'preview') } as ContentRecord); setPreviewError(''); setMessage(''); } catch (error) { setPreviewError(error instanceof Error ? error.message : 'Check your fields.'); } }}>Preview</button></div>
         {previewError && <p id="preview-error" role="alert" className="admin-preview-error">{previewError}</p>}
