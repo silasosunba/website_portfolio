@@ -4,18 +4,22 @@ News, Projects, Articles, and Books live in separate Supabase tables. Public pag
 
 ## Hosting
 
-Deploy `portfolio/` to a host that runs Next.js (for example your existing Vercel project). Build with `npm run build` and run with `npm start` when self-hosting. GitHub Pages and `output: 'export'` cannot run authentication, Server Actions, or SSR. The repository workflow validates changes; it does not deploy a static export.
+Deploy from GitHub to **Cloudflare Workers** with the OpenNext adapter. Set the dashboard Root directory to `portfolio`, Build command to `npm run build:cloudflare`, and Deploy command to `npm run deploy:cloudflare`. The Worker name is `silas-portfolio`. See the [complete Workers deployment settings](../../README.md#cloudflare-dashboard-github-to-workers) for bindings, Node version, environment handling, and verification.
+
+SSR, authentication, Server Actions, publishing, and private media run on the Worker. Static assets in `public/` remain included. The repository's `ci.yml` validates both the Next.js build and the Worker bundle without deploying. Keep the existing Supabase schema and data when changing hosts.
 
 ## Environment
 
-Set these on the Next.js server and in `portfolio/.env.local` for local development:
+Set these in both Workers Builds **Build variables and secrets** and the Worker runtime **Variables & Secrets**, and in `portfolio/.env.local` for local development. Values below are placeholders only:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_REPLACE_ME
 ```
 
-No service-role key, database password, or secret key is required by this application. Only a publishable key is accepted. Sessions use Secure (production), HttpOnly, SameSite=Lax cookies. The browser sends forms and Server Actions to the Next.js server. The proxy refreshes sessions only for admin and media requests. Every read of the dashboard and every write/upload independently verifies the user with Supabase Auth and checks their exact ID against `portfolio_owner`.
+Set `NEXT_PUBLIC_SITE_URL=https://YOUR_DOMAIN` in build variables for production metadata. `NODE_VERSION=22` selects the Node build environment. See the root README for the distinction between build and runtime variables.
+
+No service-role key, database password, or secret key is required by this application. Only a publishable key is accepted. Sessions use Secure (production), HttpOnly, SameSite=Lax cookies. The browser sends forms and Server Actions to the Next.js server. The middleware refreshes sessions only for admin and media requests. Every read of the dashboard and every write/upload independently verifies the user with Supabase Auth and checks their exact ID against `portfolio_owner`.
 
 ## Database installation / migration
 
