@@ -7,6 +7,7 @@ import type { ContentRecord } from '../../lib/cms/model';
 type Props = {
   records: ContentRecord[];
   disabled: boolean;
+  dateOrdered?: boolean;
   onEdit: (record: ContentRecord) => void;
   onDelete: (record: ContentRecord) => void;
   onReorder: (ids: string[]) => Promise<void>;
@@ -21,7 +22,7 @@ function move(entries: ContentRecord[], from: number, to: number) {
   return next;
 }
 
-export default function OrderedEntryList({ records, disabled, onEdit, onDelete, onReorder, onDraggingChange }: Props) {
+export default function OrderedEntryList({ records, disabled, dateOrdered = false, onEdit, onDelete, onReorder, onDraggingChange }: Props) {
   const list = useRef<HTMLUListElement>(null);
   const drag = useRef<Drag | null>(null);
   const [preview, setPreview] = useState<ContentRecord[] | null>(null);
@@ -72,7 +73,7 @@ export default function OrderedEntryList({ records, disabled, onEdit, onDelete, 
   }, [dragId, onDraggingChange]);
 
   function start(event: PointerEvent<HTMLButtonElement>, record: ContentRecord) {
-    if (disabled || drag.current || !event.isPrimary || event.button !== 0) return;
+    if (dateOrdered || disabled || drag.current || !event.isPrimary || event.button !== 0) return;
     list.current?.setPointerCapture(event.pointerId);
     drag.current = { id: record.id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false, order: records };
     setDragId(record.id); onDraggingChange(true);
@@ -95,7 +96,7 @@ export default function OrderedEntryList({ records, disabled, onEdit, onDelete, 
     } else setPreview(null);
   }
   async function step(index: number, offset: number) {
-    if (disabled || drag.current || index + offset < 0 || index + offset >= records.length) return;
+    if (dateOrdered || disabled || drag.current || index + offset < 0 || index + offset >= records.length) return;
     const next = move(records, index, index + offset);
     setPreview(next);
     try { await onReorder(next.map(entry => entry.id)); }
@@ -106,19 +107,19 @@ export default function OrderedEntryList({ records, disabled, onEdit, onDelete, 
   }
 
   return <>
-    <p id="entry-order-help" className="admin-help admin-order-help">Drag the grip to reorder. On a keyboard, focus the grip and use ↑ / ↓, or use the move buttons. Changes save automatically.</p>
+    <p id="entry-order-help" className="admin-help admin-order-help">{dateOrdered ? 'Newest first by publication date. Change a writing’s publication date to change its placement.' : 'Drag the grip to reorder. On a keyboard, focus the grip and use ↑ / ↓, or use the move buttons. Changes save automatically.'}</p>
     <p className="sr-only" role="status">{announcement}</p>
     <ul ref={list} aria-label="Ordered entries" aria-busy={disabled} onPointerMove={pointerMove} onPointerUp={event => { void finish(event); }} onPointerCancel={cancel} onLostPointerCapture={() => { if (drag.current) cancel(); }}>
       {entries.map((record, index) => <li key={record.id} data-order-id={record.id} className={dragId === record.id ? 'admin-entry-dragging' : ''}>
         <div className="admin-entry-order-row">
-          <span className="admin-help">{record.published ? 'Published' : 'Draft'} · Order {preview ? index : record.position}</span>
-          <div className="admin-order-controls">
+          <span className="admin-help">{record.published ? 'Published' : 'Draft'} · {dateOrdered && 'date_value' in record ? record.date_value : `Order ${preview ? index : record.position}`}</span>
+          {!dateOrdered && <div className="admin-order-controls">
             <button type="button" className="admin-order-button" aria-label={`Move ${record.title} up`} disabled={disabled || !!dragId || index === 0} onClick={() => { void step(index, -1); }}><FaArrowUp aria-hidden="true" /></button>
             <button type="button" className="admin-order-button" aria-label={`Move ${record.title} down`} disabled={disabled || !!dragId || index === entries.length - 1} onClick={() => { void step(index, 1); }}><FaArrowDown aria-hidden="true" /></button>
             <button type="button" className="admin-order-button admin-drag-handle" aria-label={`Reorder ${record.title}`} aria-describedby="entry-order-help" disabled={disabled} onPointerDown={event => start(event, record)} onKeyDown={event => {
               if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); void step(index, event.key === 'ArrowUp' ? -1 : 1); }
             }}><FaGripVertical aria-hidden="true" /></button>
-          </div>
+          </div>}
         </div>
         <h3>{record.title}</h3>
         <div className="admin-toolbar">

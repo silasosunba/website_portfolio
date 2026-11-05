@@ -1,5 +1,6 @@
 import type { ArticleRecord, BookRecord, NewsRecord, ProjectRecord } from '../../lib/cms/model';
-import { imageFor, safeUrl } from '../../lib/cms/model';
+import Link from 'next/link';
+import { imageFor, safeUrl, writingHref } from '../../lib/cms/model';
 import RichText from './RichText';
 
 export function ContentNotice({ label, unavailable = false }: { label: string; unavailable?: boolean }) {
@@ -18,13 +19,18 @@ export function ProjectList({ entries }: { entries: ProjectRecord[] }) {
     </div>
   </article>)}</div>;
 }
-export function ArticleList({ entries }: { entries: ArticleRecord[] }) {
-  return <div className="article-list">{entries.map(post => <article key={post.id} className="article-entry">
-    <a className="article-entry-image" href={safeUrl(post.url)} target="_blank" rel="noopener noreferrer" aria-label={`Read ${post.title}`} tabIndex={-1}><img src={imageFor(post)} alt="" loading="lazy" /></a>
-    <div className="article-entry-content"><div className="article-entry-meta"><time dateTime={post.date_value}>{new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${post.date_value}T00:00:00Z`))}</time><span>{post.reading_minutes} min read</span></div>
-      <h2><a href={safeUrl(post.url)} target="_blank" rel="noopener noreferrer">{post.title} <span aria-hidden="true">↗</span></a></h2><p>{post.excerpt}</p>
-    </div>
-  </article>)}</div>;
+export function ArticleList({ entries }: { entries: Omit<ArticleRecord, 'body'>[] }) {
+  return <div className="article-list">{entries.map(post => {
+    const internal = post.publication_type === 'in-app';
+    const href = writingHref(post);
+    return <article key={post.id} className="article-entry">
+      {internal ? <Link className="article-entry-image" href={href} aria-label={`Read ${post.title}`} tabIndex={-1}><img src={imageFor(post)} alt="" loading="lazy" /></Link> : <a className="article-entry-image" href={href} target="_blank" rel="noopener noreferrer" aria-label={`Read ${post.title} on Medium`} tabIndex={-1}><img src={imageFor(post)} alt="" loading="lazy" /></a>}
+      <div className="article-entry-content"><div className="article-entry-meta"><time dateTime={post.date_value}>{new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${post.date_value}T00:00:00Z`))}</time><span>{post.reading_minutes} min read</span></div>
+        <h2>{internal ? <Link href={href}>{post.title}</Link> : <a href={href} target="_blank" rel="noopener noreferrer">{post.title} <span aria-hidden="true">↗</span></a>}</h2><p>{post.excerpt}</p>
+        <div className="writing-read-link">{internal ? <Link href={href}>Read article →</Link> : <a href={href} target="_blank" rel="noopener noreferrer">Read on Medium ↗</a>}</div>
+      </div>
+    </article>;
+  })}</div>;
 }
 export function BookList({ entries }: { entries: BookRecord[] }) {
   return <div className="grid gap-6 md:grid-cols-2">{entries.map(book => <article key={book.id} className="card-surface p-6">

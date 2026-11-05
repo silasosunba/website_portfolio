@@ -3,11 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireOwner, sessionClient } from '../../lib/supabase/server';
-import { contentTables, imageType, isContentKind, isUuid, MAX_IMAGE_BYTES, validateContent, type ActionResult, type ContentKind, type ContentRecord } from '../../lib/cms/model';
+import { contentTables, imageType, isContentKind, isUuid, MAX_IMAGE_BYTES, validateContent, type ActionResult, type ContentKind, type ContentRecord, type WritingBody } from '../../lib/cms/model';
 
 function invalidate(kind: ContentKind) {
   const paths = kind === 'news' ? ['/'] : kind === 'projects' ? ['/projects'] : [`/${kind}`];
   paths.forEach(path => revalidatePath(path));
+  if (kind === 'articles') revalidatePath('/articles/[slug]', 'page');
   revalidatePath('/admin');
 }
 function failure(error: unknown): { ok: false; error: string } {
@@ -37,6 +38,10 @@ export async function saveContent(kind: ContentKind, input: unknown, expected: O
     const raw = input as Record<string, unknown>;
     const values = validateContent(kind, input);
     if (values.image_path && !String(values.image_path).startsWith(`${user.id}/`)) throw new Error('You can only attach your own uploads.');
+    if (kind === 'articles' && values.publication_type === 'in-app') {
+      const blocks = (values.body as WritingBody).blocks;
+      if (blocks.some(block => block.type === 'image' && block.image_path && !block.image_path.startsWith(`${user.id}/`))) throw new Error('You can only attach your own writing images.');
+    }
     // Existing seeded covers may remain, but new/replacement covers must be uploads.
     if (kind !== 'news' && values.image_url) {
       if (!isUuid(raw.id)) throw new Error('Upload an image file instead of entering an image URL.');
@@ -57,6 +62,8 @@ async function mutateOrdered(client: Awaited<ReturnType<typeof sessionClient>>, 
   const { data, error } = await client.rpc('portfolio_mutate_ordered', { p_kind: kind, p_operation: operation, p_expected: expected, ...options });
   if (error?.code === '40001') throw new Error('Content changed in another tab. Reload the dashboard before trying again.');
   if (error?.code === 'PGRST202' || error?.code === '42883') throw new Error('Apply 007_content_ordering.sql in Supabase SQL Editor, then reload the dashboard.');
+  if (kind === 'articles' && error?.code === '23505') throw new Error('That article URL slug is already used. Choose a different slug.');
+  if (kind === 'articles' && error && (['PGRST204', '42703'].includes(error.code) || error.message.includes('Invalid content fields'))) throw new Error('Apply 008_in_app_writings.sql in Supabase SQL Editor, then reload the dashboard.');
   if (error || !Array.isArray(data)) throw new Error('Could not save the list. Check your connection and database setup. No partial order was saved.');
   return data as ContentRecord[];
 }

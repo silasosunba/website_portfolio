@@ -10,7 +10,7 @@ export default async function AdminPage() {
   if (!owner) redirect('/admin/login');
   const records: Record<ContentKind, ContentRecord[]> = { news: [], projects: [], articles: [], books: [] };
   const results = await Promise.all(contentKinds.map(async kind => {
-    const { data, error } = await owner.client.from(contentTables[kind]).select('*').order('position').order('created_at', { ascending: false });
+    const { data, error } = await owner.client.from(contentTables[kind]).select('*').order(kind === 'articles' ? 'date_value' : 'position', { ascending: kind !== 'articles' }).order('created_at', { ascending: false }).order('id');
     if (!error) records[kind] = data as ContentRecord[];
     return Boolean(error);
   }));

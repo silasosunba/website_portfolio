@@ -2,11 +2,13 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { deleteContent, reorderContent, saveContent, signOut, uploadImage } from '../../app/admin/actions';
-import { contentKinds, contentLabels, emptyDraft, imageFor, MAX_IMAGE_BYTES, validateContent, type ArticleRecord, type BookRecord, type ContentKind, type ContentRecord, type NewsBody, type NewsRecord, type ProjectRecord } from '../../lib/cms/model';
+import { blankWritingBody, compareWritingsNewestFirst, writingReadingMinutes, contentKinds, contentLabels, emptyDraft, imageFor, MAX_IMAGE_BYTES, validateContent, type ArticleRecord, type BookRecord, type ContentKind, type ContentRecord, type NewsBody, type NewsRecord, type ProjectRecord, type WritingBody } from '../../lib/cms/model';
 import { ArticleList, BookList, NewsList, ProjectList } from '../content/ContentLists';
 import { FaCloudUploadAlt, FaSignOutAlt } from 'react-icons/fa';
 import NewsEditor from './NewsEditor';
 import OrderedEntryList from './OrderedEntryList';
+import WritingEditor from './WritingEditor';
+import WritingArticle from '../content/WritingArticle';
 import ConfirmationDialog from './ConfirmationDialog';
 import ContentPreview from './ContentPreview';
 import EntryEditorDialog from './EntryEditorDialog';
@@ -17,7 +19,7 @@ type PendingAction = { type: 'select'; kind: ContentKind; record?: ContentRecord
 function Preview({ kind, record }: { kind: ContentKind; record: ContentRecord }) {
   if (kind === 'news') return <div className="home-news"><NewsList entries={[record as NewsRecord]} /></div>;
   if (kind === 'projects') return <ProjectList entries={[record as ProjectRecord]} />;
-  if (kind === 'articles') return <ArticleList entries={[record as ArticleRecord]} />;
+  if (kind === 'articles') return (record as ArticleRecord).publication_type === 'in-app' ? <WritingArticle post={record as ArticleRecord} /> : <ArticleList entries={[record as ArticleRecord]} />;
   return <BookList entries={[record as BookRecord]} />;
 }
 export default function AdminDashboard({ initialRecords, setupError }: { initialRecords: Record<ContentKind, ContentRecord[]>; setupError: boolean }) {
@@ -38,6 +40,8 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
   const [deleteError, setDeleteError] = useState('');
   const [previewError, setPreviewError] = useState('');
   const [preview, setPreview] = useState<ContentRecord | null>(null);
+  const [writingEditorError, setWritingEditorError] = useState('');
+  const visibleRecords = kind === 'articles' ? [...records.articles as ArticleRecord[]].sort(compareWritingsNewestFirst) : records[kind];
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
@@ -46,7 +50,7 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
   }, [dirty]);
   function change(patch: Draft) { setDraft(previous => ({ ...previous, ...patch })); setDirty(true); setPreview(null); setPreviewError(''); }
   function applySelection(next: ContentKind, record?: ContentRecord, openEditor = true) {
-    setSaveNotice(null); setEditorOpen(openEditor); setKind(next); setDraft(record ? { ...record, position: records[next].findIndex(entry => entry.id === record.id) } : emptyDraft(next)); setDirty(false); setPreview(null); setPreviewError(''); setMessage('');
+    setWritingEditorError(''); setSaveNotice(null); setEditorOpen(openEditor); setKind(next); setDraft(record ? { ...record, position: records[next].findIndex(entry => entry.id === record.id) } : emptyDraft(next)); setDirty(false); setPreview(null); setPreviewError(''); setMessage('');
   }
   function select(next: ContentKind, record?: ContentRecord, openEditor = true) {
     if (dirty) { setDiscardError(''); setPendingAction({ type: 'select', kind: next, record, openEditor }); }
@@ -74,7 +78,7 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
   }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || writingEditorError) return;
     setBusy(true); setMessage('');
     setSaveNotice({ status: 'saving', title: draft.published ? 'Saving and publishing…' : 'Saving draft…', description: 'Please wait while your changes are saved.' });
     try {
@@ -116,16 +120,18 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
       setSaveNotice({ status: 'error', title: 'Order could not be confirmed', description: 'Check your connection, then reload the dashboard before retrying.' });
     } finally { setBusy(false); }
   }
-  async function upload(file?: File) {
-    if (!file) return;
-    if (file.size > MAX_IMAGE_BYTES) { setMessage('Choose an image up to 5 MB.'); return; }
+  async function upload(file?: File, attachCover = true): Promise<string | null> {
+    if (!file) return null;
+    if (file.size > MAX_IMAGE_BYTES) { setMessage('Choose an image up to 5 MB.'); return null; }
     setBusy(true); setMessage('Uploading image…');
     try {
       const form = new FormData(); form.set('image', file);
       const result = await uploadImage(form);
-      if (!result.ok) { setMessage(result.error); return; }
-      change({ image_path: result.data.path, image_url: '' }); setMessage('Image uploaded privately. Save the entry to attach it.');
-    } catch { setMessage('Upload interrupted. Please try again.'); }
+      if (!result.ok) { setMessage(result.error); return null; }
+      if (attachCover) change({ image_path: result.data.path, image_url: '' });
+      setMessage('Image uploaded privately. Save the entry to attach it.');
+      return result.data.path;
+    } catch { setMessage('Upload interrupted. Please try again.'); return null; }
     finally { setBusy(false); }
   }
   const field = (name: string, label: string, options: { type?: string; required?: boolean; max?: number } = {}) => <label className="admin-field">{label}<input type={options.type ?? 'text'} value={String(draft[name] ?? '')} required={options.required} maxLength={options.max ?? 2048} onChange={e => change({ [name]: e.target.value })} /></label>;
@@ -139,7 +145,7 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
     <div className="admin-workspace">
       <section className="admin-entry-list"><div className="admin-toolbar"><h2 className="content-title">{contentLabels[kind]}</h2><button className="btn-secondary" type="button" disabled={locked || setupError} onClick={() => select(kind)}>New entry</button></div>
         {!records[kind].length && <p className="admin-help mt-4">No entries yet. Create a draft to get started.</p>}
-        <OrderedEntryList key={kind} records={records[kind]} disabled={busy || setupError} onDraggingChange={setDragging} onReorder={reorder} onEdit={record => select(kind, record)} onDelete={record => { setDeleteError(''); setDeleteTarget({ kind, record }); }} />
+        <OrderedEntryList key={kind} records={visibleRecords} dateOrdered={kind === 'articles'} disabled={busy || setupError} onDraggingChange={setDragging} onReorder={reorder} onEdit={record => select(kind, record)} onDelete={record => { setDeleteError(''); setDeleteTarget({ kind, record }); }} />
       </section>
     </div>
     {editorOpen && <EntryEditorDialog title={`${draft.id ? 'Edit' : 'New'} ${contentLabels[kind].toLowerCase()} entry`} busy={busy} onClose={closeEditor}>
@@ -149,16 +155,26 @@ export default function AdminDashboard({ initialRecords, setupError }: { initial
         {field('title', kind === 'news' ? 'Internal title (for your dashboard)' : 'Title', { required: true, max: 300 })}
         {kind === 'news' && <>{field('date_label', 'Display date (e.g. Oct 2026)', { required: true, max: 80 })}{field('date_value', 'Sort/reference date (YYYY, YYYY-MM, or YYYY-MM-DD)', { required: true, max: 10 })}<NewsEditor value={draft.body as NewsBody} onChange={body => change({ body })} /></>}
         {kind === 'projects' && <>{area('description', 'Project description', 20000)}<fieldset className="admin-categories"><legend>Category</legend>{['Engineering', 'Civic'].map(category => <label key={category}><input type="checkbox" checked={(draft.categories as string[]).includes(category)} onChange={e => change({ categories: e.target.checked ? [...draft.categories as string[], category] : (draft.categories as string[]).filter(value => value !== category) })} /> {category}</label>)}</fieldset>{field('credit', 'Contributors / credit', { max: 500 })}{field('date_label', 'Project dates (optional)', { max: 80 })}{field('link_url', 'Main project link', { required: true, type: 'url' })}{field('code_url', 'Code link (optional)', { type: 'url' })}{field('demo_url', 'Demo link (optional)', { type: 'url' })}</>}
-        {kind === 'articles' && <>{area('excerpt', 'Writing excerpt', 5000)}{field('date_value', 'Publication date', { type: 'date', required: true })}<label className="admin-field">Reading time (minutes)<input type="number" min={1} max={300} value={Number(draft.reading_minutes)} required onChange={e => change({ reading_minutes: Number(e.target.value) })} /></label>{field('url', 'Medium writing URL', { type: 'url', required: true })}</>}
+        {kind === 'articles' && <>
+          <label className="admin-field">Publish location<select value={String(draft.publication_type ?? 'medium')} onChange={event => { setWritingEditorError(''); change({ publication_type: event.target.value }); }}><option value="medium">On Medium</option><option value="in-app">On this website</option></select></label>
+          {draft.publication_type !== 'in-app' && (draft.body as WritingBody | undefined)?.blocks.length ? <p className="admin-help">Saving as a Medium link removes the saved in-app article text and URL. Switch back before saving to keep editing it.</p> : null}
+          {area('excerpt', 'Writing excerpt', 5000)}{field('date_value', 'Publication date', { type: 'date', required: true })}
+          {draft.publication_type === 'in-app' ? <>
+            {field('slug', 'Article URL slug (optional; generated from the title when blank)', { max: 100 })}
+            <p className="admin-help">Your article will open at /articles/your-slug. Use lowercase letters, numbers, and hyphens. Changing a saved slug changes its URL.</p>
+            <WritingEditor value={(draft.body as WritingBody) ?? blankWritingBody()} onChange={body => change({ body })} onUpload={file => upload(file, false)} disabled={busy || setupError} onError={error => { setWritingEditorError(error); if (error) setDirty(true); }} />
+            <p className="admin-help">Estimated reading time: {writingReadingMinutes((draft.body as WritingBody) ?? blankWritingBody())} min</p>
+          </> : <><label className="admin-field">Reading time (minutes)<input type="number" min={1} max={300} value={Number(draft.reading_minutes)} required onChange={e => change({ reading_minutes: Number(e.target.value) })} /></label>{field('url', 'Medium writing URL', { type: 'url', required: true })}</>}
+        </>}
         {kind === 'books' && <>{field('author', 'Author', { max: 300 })}{area('body', 'Notes / thoughts', 30000)}{field('date_label', 'Reading date (optional)', { max: 80 })}{field('url', 'Book link (optional)', { type: 'url' })}<label className="admin-field">Reading status<select value={String(draft.status)} onChange={e => change({ status: e.target.value })}><option value="planned">Want to read</option><option value="in-progress">Reading</option><option value="completed">Completed</option></select></label></>}
         {kind !== 'news' && <fieldset className="admin-image"><legend>Image</legend><label className="admin-upload-picker">
           <input className="sr-only" type="file" aria-label={selectedImage ? 'Choose a replacement image' : 'Choose an image'} aria-describedby="upload-formats" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => { void upload(e.target.files?.[0]); e.target.value = ''; }} />
           <span className="admin-upload-icon"><FaCloudUploadAlt aria-hidden="true" /></span>
           <span><span className="admin-upload-label">{selectedImage ? 'Choose replacement image' : 'Choose image'}</span><span id="upload-formats" className="admin-help admin-upload-formats">PNG, JPEG, WebP, or GIF · Up to 5 MB</span></span>
         </label>{selectedImage && <><img src={selectedImage} alt="Selected cover" className="admin-image-preview" /><button type="button" className="btn-secondary" onClick={() => change({ image_path: '', image_url: '' })}>Remove from entry</button></>}<p className="admin-help">Upload a file to add or replace an image. Uploads are private until attached to a published entry.</p></fieldset>}
-        <label className="admin-field">Insert at position (0 is first; other entries shift automatically)<input type="number" min={0} max={Math.max(0, records[kind].length - (draft.id ? 1 : 0))} step={1} value={Number(draft.position)} required onChange={e => change({ position: Number(e.target.value) })} /></label>
+        {kind !== 'articles' && <label className="admin-field">Insert at position (0 is first; other entries shift automatically)<input type="number" min={0} max={Math.max(0, records[kind].length - (draft.id ? 1 : 0))} step={1} value={Number(draft.position)} required onChange={e => change({ position: Number(e.target.value) })} /></label>}
         <label className="admin-publish"><input type="checkbox" checked={Boolean(draft.published)} onChange={e => change({ published: e.target.checked })} /> Published — visible to everyone</label>
-        <div className="admin-toolbar"><button className="btn-primary">{busy ? 'Working…' : draft.published ? 'Save and publish' : 'Save draft'}</button><button type="button" className="btn-secondary" aria-describedby={previewError ? 'preview-error' : undefined} onClick={() => { try { const values = validateContent(kind, draft); setPreview({ ...values, id: String(draft.id ?? 'preview') } as ContentRecord); setPreviewError(''); setMessage(''); } catch (error) { setPreviewError(error instanceof Error ? error.message : 'Check your fields.'); } }}>Preview</button></div>
+        <div className="admin-toolbar"><button className="btn-primary" disabled={!!writingEditorError}>{busy ? 'Working…' : draft.published ? 'Save and publish' : 'Save draft'}</button><button type="button" className="btn-secondary" disabled={!!writingEditorError} aria-describedby={previewError ? 'preview-error' : undefined} onClick={() => { try { const values = validateContent(kind, draft); setPreview({ ...values, id: String(draft.id ?? 'preview') } as ContentRecord); setPreviewError(''); setMessage(''); } catch (error) { setPreviewError(error instanceof Error ? error.message : 'Check your fields.'); } }}>Preview</button></div>
         {previewError && <p id="preview-error" role="alert" className="admin-preview-error">{previewError}</p>}
       </fieldset></form>
       {saveNotice && <SaveNotification notice={saveNotice} onDismiss={() => setSaveNotice(null)} />}

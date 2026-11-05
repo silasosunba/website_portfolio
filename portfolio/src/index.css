@@ -711,3 +711,58 @@ body:has(dialog[open]) { overflow: hidden; }
 .dark .admin-order-button { border-color: var(--color-line-dark); }
 .dark .admin-order-button:hover { border-color: var(--color-gold); background: #c4a57412; }
 .dark .admin-entry-dragging { background: var(--color-surface-dark); outline-color: var(--color-gold); }
+
+/* Writings share the site's typography, with a readable full-article layout. */
+.writing-read-link { margin-top: 18px; font-size: 14px; }
+.writing-read-link a, .writing-back-link, .writing-article-body a { text-decoration: underline; text-underline-offset: 4px; }
+.writing-page { padding-block: 110px 60px; }
+.writing-back-link { display: inline-block; margin-bottom: 28px; font-size: 14px; }
+.writing-article { max-width: 860px; margin-inline: auto; min-width: 0; }
+.writing-article-header .page-title { overflow-wrap: anywhere; }
+.writing-article-excerpt { margin-block: 20px; color: var(--color-muted); font-size: 16px; line-height: 1.8; }
+.writing-article-cover { width: 100%; max-height: 520px; object-fit: contain; margin-block: 28px; border-radius: 6px; }
+.writing-article-body { font-size: 16px; line-height: 1.85; overflow-wrap: anywhere; }
+.writing-article-body > * { margin-block: 22px; }
+.writing-article-body p, .writing-article-body blockquote { white-space: pre-wrap; }
+.writing-article-body h2 { margin-top: 38px; font-size: 30px; font-weight: 600; line-height: 1.25; }
+.writing-article-body h3 { margin-top: 28px; font-size: 24px; font-weight: 600; line-height: 1.3; }
+.writing-article-body ul { list-style: disc; padding-left: 26px; }
+.writing-article-body ol { list-style: decimal; padding-left: 26px; }
+.writing-article-body li { margin-block: 8px; white-space: pre-wrap; }
+.writing-article-body blockquote { border-left: 3px solid var(--color-line); padding-left: 20px; font-style: italic; }
+.writing-article-body img { max-width: 100%; height: auto; margin-inline: auto; border-radius: 6px; }
+.writing-article-body figcaption { margin-top: 10px; text-align: center; color: var(--color-muted); font-size: 13px; }
+.writing-editor { min-width: 0; }
+.writing-editor > legend { margin-bottom: 10px; font-weight: 600; }
+.dark .writing-article-excerpt, .dark .writing-article-body figcaption { color: var(--color-muted-dark); }
+.dark .writing-article-body blockquote { border-color: var(--color-line-dark); }
+@media (max-width: 767px) {
+  .writing-page { padding-block: 100px 40px; }
+  .writing-article-body h2 { font-size: 27px; }
+}
+
+.writing-visual-editor { margin-top: 14px; min-width: 0; border: 1px solid var(--color-line); border-radius: 8px; overflow: hidden; }
+.writing-format-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px; border-bottom: 1px solid var(--color-line); background: var(--color-canvas); }
+.writing-format-toolbar select { max-width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--color-line); border-radius: 5px; font-size: 13px; }
+.writing-tool { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 44px; min-height: 44px; padding: 10px; border: 1px solid transparent; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.writing-tool:hover, .writing-tool[aria-pressed="true"] { border-color: var(--color-accent); background: #0f766e12; color: var(--color-accent); }
+.writing-tool:focus-visible, .writing-upload-tool:focus-within { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.writing-tool:disabled, .writing-tool.disabled { opacity: .4; cursor: not-allowed; }
+.writing-tool svg { width: 15px; height: 15px; flex-shrink: 0; }
+.writing-visual-content { min-height: 340px; max-height: 60vh; overflow-y: auto; padding: 18px; outline: none; }
+.writing-visual-content:focus { box-shadow: inset 0 0 0 2px var(--color-accent); }
+.writing-visual-content > :first-child { margin-top: 0; }
+.writing-visual-content > :last-child { margin-bottom: 0; }
+.writing-visual-content .ProseMirror-selectednode { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.writing-visual-content[contenteditable="false"] { opacity: .65; }
+.writing-link-editor { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; padding: 14px; border-bottom: 1px solid var(--color-line); }
+.writing-link-editor .admin-field { flex: 1 1 220px; min-width: 0; }
+.writing-visual-editor > .admin-preview-error { padding: 12px; }
+.writing-image-details { display: grid; gap: 14px; padding: 16px; border-top: 1px solid var(--color-line); }
+.dark .writing-visual-editor, .dark .writing-format-toolbar, .dark .writing-format-toolbar select, .dark .writing-link-editor, .dark .writing-image-details { border-color: var(--color-line-dark); }
+.dark .writing-format-toolbar { background: var(--color-surface-dark); }
+.dark .writing-tool:hover, .dark .writing-tool[aria-pressed="true"] { border-color: var(--color-gold); color: var(--color-gold); background: #c4a57418; }
+@media (max-width: 767px) {
+  .writing-visual-content { min-height: 280px; padding: 14px; }
+  .writing-format-toolbar { gap: 4px; padding: 8px; }
+}
