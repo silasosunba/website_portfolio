@@ -103,8 +103,8 @@ export default function AboutPage() {
             a die-hard supporter of Barcelona (one of my wildest dreams is to support my club live at Camp Nou, someday). I also explore finance and blockchain, and I enjoy
             playing snooker. Most importantly, I am a melomaniac,
             probably because I wanted to be a rapper/trap star until I locked out
-            to lock in on my engineering studies. Fun fact: I released a song on
-            Audiomack way back in 2020 (“<a href="https://audiomack.com/soundsfromib/song/only-you" target="_blank" rel="noopener noreferrer">Only You</a> ”) at 16.
+            to lock in on my engineering studies. Fun fact: I published my first and last studio
+            recording, “<a href="https://audiomack.com/soundsfromib/song/only-you" target="_blank" rel="noopener noreferrer">Only You</a>,” on Audiomack way back in 2020, when I was 16.
           </p>
         </div>
         <section className="about-experience"><h2>Experience</h2>{experienceGroups.map(group => <EntryList key={group.title} title={group.title} entries={group.entries} subsection />)}</section>
