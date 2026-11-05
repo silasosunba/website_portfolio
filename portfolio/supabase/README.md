@@ -1,6 +1,6 @@
 # Portfolio content management
 
-News, Projects, Articles, and Books live in separate Supabase tables. Public pages render on the Next.js server; the browser does not query Supabase. The homepage biography, About story, research publications, documents, and visual design remain repository-managed.
+News, Projects, Articles, and Books live in separate Supabase tables. Public pages render on the Next.js server; the browser does not query Supabase. Resume and Academic CV PDFs can also be replaced through the owner dashboard and stored in Supabase. The homepage biography, About story, research publications, and visual design remain repository-managed.
 
 ## Hosting
 
@@ -31,7 +31,8 @@ Back up your existing database before applying schema changes. In the Supabase S
 4. Run `008_in_app_writings.sql` to enable Medium and in-app publishing. Existing writings remain Medium entries. It adds structured article bodies, unique URL slugs, and publication-aware access to inline images.
 5. Run `009_visual_writing_formatting.sql` to preserve visual-editor formatting in headings, quotes, and list items. Existing plain-text blocks remain valid.
 6. Run `010_github_username.sql` to update existing CMS GitHub links from the previous username to `silasosunba`. This migration preserves repository paths, query strings, publication states, and ordering. Updating the seed alone does not update existing database rows.
-7. If you already have a row in `portfolio_owner`, keep it. Otherwise create your email/password account under Authentication → Users, confirm it, and register its UUID:
+7. Run `011_portfolio_documents.sql` to enable owner-only PDF uploads for Resume and Academic CV. It creates a separate private storage bucket, current-document metadata, and a versioned publish function. No existing PDFs are uploaded or deleted by this migration.
+8. If you already have a row in `portfolio_owner`, keep it. Otherwise create your email/password account under Authentication → Users, confirm it, and register its UUID:
 
 ```sql
 insert into public.portfolio_owner (singleton, user_id)
@@ -44,7 +45,7 @@ Migration 005 never deletes legacy data. External HTTP image/book links from leg
 
 ## Owner workflow
 
-Open `/admin` and sign in at `/admin/login`. Choose News, Projects, Articles, or Books.
+Open `/admin` and sign in at `/admin/login`. Choose News, Projects, Writings, Books, or Documents.
 
 - Save as a draft or publish. Uncheck Published and save to unpublish.
 - News, Projects, and Books: drag an entry by its grip to reorder it (mouse or touch). Use the up/down buttons or focus the grip and press arrow keys for keyboard access. Drop to save automatically; Escape cancels an active drag.
@@ -62,6 +63,18 @@ Open `/admin` and sign in at `/admin/login`. Choose News, Projects, Articles, or
 - Deletion requires confirmation. Deleting an entry does not delete its image, which may be shared by another entry. Unattached uploads remain private. You can remove unused objects through the Supabase Storage dashboard.
 
 New content appears without code changes or a deployment. Public lists query Supabase on every server render using an anonymous client and no persistent content cache. Successful writes revalidate the affected routes. Changes made from another deployment or directly in Supabase are visible on the next fresh page request when both environments use the same Supabase project. Refresh an already-open public page to see updates; pages do not subscribe to live changes. Public reads never use your owner session. Failed queries show a small unavailable state and are not replaced with old static content.
+
+## Resume and Academic CV uploads
+
+Apply `011_portfolio_documents.sql` once in your connected Supabase project's SQL Editor, deploy the updated application, and reload `/admin`. No new environment variables or service-role key are needed.
+
+In **Documents**, choose the Resume or Academic CV PDF (up to 5 MB), optionally preview the selected local file, then click **Upload and publish** or **Upload and replace**. The file is checked on the server and stored in the private `portfolio-documents` bucket under an immutable owner UUID path. A current-document pointer is updated only after the upload succeeds. Only your exact owner account can publish replacements. A version check rejects stale admin tabs; reload before retrying after a conflict or unconfirmed response. The existing unsaved-change dialog also protects selected PDFs when changing sections or signing out.
+
+The public CV viewer uses `/api/documents/resume` and `/api/documents/cv`; `?download=1` requests an attachment. These server routes read current metadata anonymously and proxy only the current PDF, with PDF MIME type, safe download filenames, and no-store headers. Reopen the viewer or reload a document to see a replacement; an already-open PDF does not update itself. Browser PDF support varies, so the viewer retains open-in-new-tab and download links.
+
+Until the first successful upload for a slot, the route redirects to its existing PDF in `public/documents/`. The bundled PDFs are preserved, including existing direct file URLs. Once a slot has an uploaded record, storage outages show an unavailable response rather than silently serving an older bundled file. The API URLs always select the latest uploaded document; the legacy direct file URLs still serve the bundled copies.
+
+Anonymous visitors cannot read unreferenced uploads or replaced storage objects. Current PDFs cannot be overwritten or removed through the owner cleanup policy. After a successful replacement, the action attempts to remove the old unreferenced object; if cleanup fails, it remains private and can be removed later through Storage. After an explicit database rejection, cleanup attempts to remove the unreferenced upload. An interrupted or ambiguous publication response retains the upload because its database transaction may still finish; reload to reconcile the current document before retrying. Previously downloaded PDFs cannot be recalled.
 
 ## Images and privacy
 
