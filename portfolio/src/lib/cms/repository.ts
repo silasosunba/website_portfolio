@@ -1,5 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
+import { reportServerError } from '../server-logger';
 import { publicClient } from '../supabase/server';
 import { contentTables, validWritingSlug, type ArticleRecord, type ContentKind, type ContentMap } from './model';
 
@@ -15,7 +16,7 @@ export async function getPublicContent<K extends ContentKind>(kind: K): Promise<
     return { entries, unavailable: false };
   } catch {
     // Fail closed: never replace database records with static seed data or expose drafts.
-    console.error(`Published ${kind} could not be loaded. Check Supabase connectivity and migration 005.`);
+    reportServerError("cms.public_content_unavailable", { contentKind: kind });
     return { entries: [], unavailable: true };
   }
 }

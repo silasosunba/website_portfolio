@@ -17,6 +17,11 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      "no-console": "error",
     },
+  },
+  {
+    files: ["src/lib/server-logger.ts"],
+    rules: { "no-console": ["error", { allow: ["error"] }] },
   },
 );
