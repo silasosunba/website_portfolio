@@ -11,5 +11,8 @@
   "services": [
     { "binding": "WORKER_SELF_REFERENCE", "service": "silas-portfolio" }
   ],
+  "ratelimits": [
+    { "name": "CONTACT_RATE_LIMITER", "namespace_id": "9471023", "simple": { "limit": 5, "period": 60 } }
+  ],
   "observability": { "enabled": true }
 }

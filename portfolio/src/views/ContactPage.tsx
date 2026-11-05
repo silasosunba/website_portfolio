@@ -13,7 +13,6 @@ import {
   FaUser,
 } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
-import emailjs from "@emailjs/browser";
 import { useTheme } from "../context/theme";
 
 export default function ContactPage() {
@@ -21,7 +20,7 @@ export default function ContactPage() {
   const formRef = useRef<HTMLFormElement>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [subject, setSubject] = useState("");
   const [customSubject, setCustomSubject] = useState("");
 
@@ -31,26 +30,45 @@ export default function ContactPage() {
     }).then(() => setEngineReady(true));
   }, []);
 
-  const sendEmail = (event: FormEvent<HTMLFormElement>) => {
+  const sendEmail = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formRef.current) return;
+    const form = formRef.current;
+    if (!form || loading) return;
+    const data = new FormData(form);
     setLoading(true);
+    setStatus(null);
 
-    emailjs
-      .sendForm("osunba_silas", "osunba_silas_template", formRef.current, "ZO_6gkFmGFacWDao-")
-      .then(
-        () => {
-          setStatus("Message sent successfully.");
-          setLoading(false);
-          formRef.current?.reset();
-          setSubject("");
-          setCustomSubject("");
-        },
-        () => {
-          setStatus("Failed to send. Please try again.");
-          setLoading(false);
-        },
-      );
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.get("from_name"),
+          email: data.get("from_email"),
+          subject: subject === "Other" ? customSubject : subject,
+          message: data.get("message"),
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) {
+        setStatus({
+          type: "error",
+          message: typeof result.error === "string"
+            ? result.error
+            : "Your message could not be sent. Please try again, or email me directly.",
+        });
+        return;
+      }
+      form.reset();
+      setSubject("");
+      setCustomSubject("");
+      setStatus({ type: "success", message: "Your message has been sent. Thank you for reaching out." });
+    } catch {
+      setStatus({ type: "error", message: "Unable to confirm sending. Please check your connection or email me directly." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const particleColor = isDark ? "#c4a574" : "#0f766e";
@@ -131,103 +149,119 @@ export default function ContactPage() {
 
           <div className="card-surface w-full p-6 sm:p-8">
             <h3 className="section-title mb-6">Send a message</h3>
-            <form ref={formRef} onSubmit={sendEmail} className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="from_name" className="mb-2 block text-sm font-medium">Name *</label>
-                  <div className="contact-field">
-                    <FaUser className="text-muted dark:text-muted-dark" aria-hidden="true" />
-                    <input
-                      type="text"
-                      id="from_name" name="from_name"
-                      placeholder="Your full name"
-                      className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
-                      required
-                    />
+            <form ref={formRef} onSubmit={sendEmail} aria-busy={loading} className="space-y-6">
+              <fieldset disabled={loading} className="m-0 min-w-0 space-y-6 border-0 p-0">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="from_name" className="mb-2 block text-sm font-medium">Name *</label>
+                    <div className="contact-field">
+                      <FaUser className="text-muted dark:text-muted-dark" aria-hidden="true" />
+                      <input
+                        type="text"
+                        id="from_name" name="from_name" autoComplete="name" maxLength={100}
+                        placeholder="Your full name"
+                        className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="from_email" className="mb-2 block text-sm font-medium">Email *</label>
+                    <div className="contact-field">
+                      <FaEnvelope className="text-muted dark:text-muted-dark" aria-hidden="true" />
+                      <input
+                        type="email"
+                        id="from_email" name="from_email" autoComplete="email" maxLength={254}
+                        placeholder="your.email@gmail.com"
+                        className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label htmlFor="from_email" className="mb-2 block text-sm font-medium">Email *</label>
-                  <div className="contact-field">
-                    <FaEnvelope className="text-muted dark:text-muted-dark" aria-hidden="true" />
-                    <input
-                      type="email"
-                      id="from_email" name="from_email"
-                      placeholder="your.email@gmail.com"
-                      className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
 
-              <div>
-                <label htmlFor="subject" className="mb-2 block text-sm font-medium">Subject *</label>
-                <div className="contact-field">
-                  <FaTag className="text-muted dark:text-muted-dark" aria-hidden="true" />
-                  <select
-                    id="subject" name="subject"
-                    value={subject}
-                    onChange={(event) => setSubject(event.target.value)}
-                    className="w-full appearance-none rounded-xl bg-transparent p-3 outline-none"
-                    required
-                  >
-                    <option value="">Select a subject</option>
-                    <option value="Research Collaboration">Research Collaboration</option>
-                    <option value="Project Inquiry">Project Inquiry</option>
-                    <option value="Collaboration Opportunity">Collaboration Opportunity</option>
-                    <option value="Speaking Engagement">Speaking Engagement</option>
-                    <option value="General Question">General Question</option>
-                    <option value="Feedback">Feedback</option>
-                    <option value="Other">Other (Custom Subject)</option>
-                  </select>
-                </div>
-              </div>
-
-              {subject === "Other" && (
                 <div>
-                  <label htmlFor="custom_subject" className="mb-2 block text-sm font-medium">Custom Subject *</label>
+                  <label htmlFor="subject" className="mb-2 block text-sm font-medium">Subject *</label>
                   <div className="contact-field">
                     <FaTag className="text-muted dark:text-muted-dark" aria-hidden="true" />
-                    <input
-                      type="text"
-                      id="custom_subject" name="custom_subject"
-                      placeholder="Enter your custom subject"
+                    <select
+                      id="subject" name="subject"
+                      value={subject}
+                      onChange={(event) => setSubject(event.target.value)}
+                      className="w-full appearance-none rounded-xl bg-transparent p-3 outline-none"
+                      required
+                    >
+                      <option value="">Select a subject</option>
+                      <option value="Research Collaboration">Research Collaboration</option>
+                      <option value="Project Inquiry">Project Inquiry</option>
+                      <option value="Collaboration Opportunity">Collaboration Opportunity</option>
+                      <option value="Speaking Engagement">Speaking Engagement</option>
+                      <option value="General Question">General Question</option>
+                      <option value="Feedback">Feedback</option>
+                      <option value="Other">Other (Custom Subject)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {subject === "Other" && (
+                  <div>
+                    <label htmlFor="custom_subject" className="mb-2 block text-sm font-medium">Custom Subject *</label>
+                    <div className="contact-field">
+                      <FaTag className="text-muted dark:text-muted-dark" aria-hidden="true" />
+                      <input
+                        type="text"
+                        id="custom_subject" name="custom_subject" maxLength={160}
+                        placeholder="Enter your custom subject"
+                        className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
+                        value={customSubject}
+                        onChange={(event) => setCustomSubject(event.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label htmlFor="message" className="mb-2 block text-sm font-medium">Message *</label>
+                  <div className="contact-field contact-field-message">
+                    <FaRegCommentDots className="text-muted dark:text-muted-dark" aria-hidden="true" />
+                    <textarea
+                      id="message" name="message" maxLength={5000}
+                      rows={5}
+                      placeholder="Tell me about your project, research, or question..."
                       className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
-                      value={customSubject}
-                      onChange={(event) => setCustomSubject(event.target.value)}
                       required
                     />
                   </div>
                 </div>
-              )}
 
-              <div>
-                <label htmlFor="message" className="mb-2 block text-sm font-medium">Message *</label>
-                <div className="contact-field contact-field-message">
-                  <FaRegCommentDots className="text-muted dark:text-muted-dark" aria-hidden="true" />
-                  <textarea
-                    id="message" name="message"
-                    rows={5}
-                    placeholder="Tell me about your project, research, or question..."
-                    className="w-full rounded-xl bg-transparent p-3 outline-none placeholder:text-muted"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button type="submit" disabled={loading} className="btn-primary">
-                {loading ? (
-                  "Sending..."
-                ) : (
-                  <>
-                    Send Message
-                    <FaTelegramPlane />
-                  </>
-                )}
-              </button>
+                <button type="submit" disabled={loading} className="btn-primary">
+                  {loading ? (
+                    "Sending..."
+                  ) : (
+                    <>
+                      Send Message
+                      <FaTelegramPlane aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              </fieldset>
             </form>
-            {status && <p role="status" className="mt-4 text-sm text-muted dark:text-muted-dark">{status}</p>}
+            {status && (
+              <div
+                role={status.type === "error" ? "alert" : "status"}
+                className={`mt-4 rounded-xl border p-4 text-sm ${status.type === "error"
+                  ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-300"
+                  : "border-accent/30 bg-accent/5 text-accent dark:border-gold/30 dark:text-gold"}`}
+              >
+                <p>{status.message}</p>
+                {status.type === "error" && (
+                  <a href="mailto:osunbasilas@gmail.com" className="mt-2 inline-block underline underline-offset-4">
+                    Email osunbasilas@gmail.com
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
