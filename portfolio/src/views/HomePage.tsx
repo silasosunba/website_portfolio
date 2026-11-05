@@ -24,26 +24,33 @@ export default async function HomePage() {
           />
         </figure>
         <div className="home-prose">
-          <p>I’m Silas Osunba, an AI Research Engineer.</p>
           <p>
-            I work at the intersection of machine learning, software, and research.
-            I’m interested in trustworthy AI, responsible AI, and how we can make
-            intelligent systems useful and accessible to more people.
+            I have been building and scaling at the convergence of applied machine
+            learning, software engineering, and research. My research interests are
+            in Applied Machine Learning, trustworthy AI and responsible AI.
           </p>
           <p>
-            I studied Electronic &amp; Computer Engineering at Lagos State University,
-            graduating with highest honors. You can explore my <Link href="/projects">projects</Link> and <Link href="/research">research</Link> to
-            see what I’ve been working on.
+            These are the questions I’m intrigued by and want to help answer:{' '}
+            <em>How do we measure or quantify the trustworthiness of an AI system?
+            How can users or operators understand how these systems reason? Why
+            did the model make this specific decision? Is it viable for the
+            system’s output to be traced and justified in human terms?</em>
           </p>
           <p>
-            I care about AI for Social Good, education, and community outreach.
-            My aim is to help more people understand and use AI responsibly,
-            particularly in communities across Africa.
+            These questions require attention in high-stakes systems - healthcare,
+            autonomous vehicles, and finance - where understanding how
+            and why intelligent systems make decisions is essential to avoiding
+            blind reliance on them.
           </p>
           <p>
-            Away from work, I follow football, explore blockchain, and play snooker.
-            I also <Link href="/articles">write</Link> about what I learn and keep track
-            of what I <Link href="/books">read</Link>. <Link href="/about">More about me</Link>.
+            Recently, I graduated with First Class Honors in Electronic &amp;
+            Computer Engineering. I care about AI for Social Good, education,
+            and understand the importance of building a community.
+          </p>
+          <p>
+            In my free time, I follow football, explore blockchain, play snooker,
+            and enjoy reading. I keep track of what I read <Link href="/books">here</Link>.{' '}
+            <Link href="/about">More about me</Link>.
           </p>
         </div>
       </div>

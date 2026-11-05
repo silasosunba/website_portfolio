@@ -7,7 +7,7 @@ export default async function ArticlesPage() {
     <div className="articles-page page-shell">
       <header className="home-heading">
         <h1>Writings</h1>
-        <p>Notes on what I’m learning, building, and thinking about in AI and software.</p>
+        <p>Here is where I write what I think.</p>
       </header>
 
       {articles.entries.length ? <ArticleList entries={articles.entries} /> : <div className="mt-8"><ContentNotice label="Writings" unavailable={articles.unavailable} /></div>}

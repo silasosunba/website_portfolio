@@ -35,7 +35,7 @@ export default function ProjectsPage({ projects, unavailable = false }: { projec
       <div id="project-list">{filteredProjects.length ? <ProjectList entries={filteredProjects} /> : <ContentNotice label="Projects" unavailable={unavailable} />}</div>
 
       <footer className="projects-footer">
-        <p>More experiments and work in progress on <a href="https://github.com/TolaniSilas" target="_blank" rel="noopener noreferrer">GitHub ↗</a></p>
+        <p>More experiments and work in progress on <a href="https://github.com/silasosunba" target="_blank" rel="noopener noreferrer">GitHub ↗</a></p>
       </footer>
     </div>
   );

@@ -68,13 +68,13 @@ const Header = () => {
     <header ref={header} className="site-header fixed top-0 left-0 z-50 w-full">
       <nav aria-label="Main navigation" className="border-b border-line/70 bg-canvas px-4 transition-colors duration-300 sm:px-6 md:px-10 xl:px-6 dark:border-line-dark/70 dark:bg-canvas-dark">
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between py-3">
-          <Link href="/" onClick={() => setMenuOpen(false)} className="font-sans text-xl font-medium tracking-tight" aria-label="silas.ai home">
-            silas.ai
+          <Link href="/" onClick={() => setMenuOpen(false)} className="font-display whitespace-nowrap text-[26px] font-semibold leading-none tracking-tight transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:text-3xl dark:hover:text-gold dark:focus-visible:outline-gold" aria-label="Silas Osunba home">
+            Silas Osunba
           </Link>
 
           <div className="header-actions flex items-center gap-3 text-sm xl:order-2 sm:gap-4">
             <a
-              href="https://github.com/TolaniSilas"
+              href="https://github.com/silasosunba"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"
@@ -131,7 +131,6 @@ const Header = () => {
             {[
               { href: "/", label: "Home" },
               { href: "/about", label: "About" },
-              { href: "/research", label: "Research" },
               { href: "/projects", label: "Projects" },
               { href: "/articles", label: "Writings" },
               { href: "/books", label: "Books" },
@@ -149,7 +148,7 @@ const Header = () => {
             </Link>
             <div className="mobile-menu-socials">
               <a href="https://www.linkedin.com/in/osunbasilas/" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><FaLinkedin aria-hidden="true" /></a>
-              <a href="https://github.com/TolaniSilas" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><FaGithub aria-hidden="true" /></a>
+              <a href="https://github.com/silasosunba" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><FaGithub aria-hidden="true" /></a>
               <a href="mailto:osunbasilas@gmail.com" aria-label="Email Silas"><FaEnvelope aria-hidden="true" /></a>
               <button type="button" onClick={toggleTheme} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>{isDark ? <FaSun aria-hidden="true" /> : <FaMoon aria-hidden="true" />}</button>
             </div>

@@ -101,7 +101,7 @@ export default function ContactPage() {
           <div>
             <h3 className="section-title mb-4">Let&apos;s connect</h3>
             <p className="mb-5 leading-relaxed text-muted dark:text-muted-dark">
-              I’m mostly interested in <strong className="font-semibold text-ink dark:text-ink-dark">AI research, trustworthy AI, and healthcare AI research</strong>.
+              I’m mostly interested in <strong className="font-semibold text-ink dark:text-ink-dark">startups, AI research, trustworthy AI, and Applied ML</strong>.
               I’d love to connect with people exploring how intelligent systems can be more reliable,
               understandable, and useful in people’s lives.
             </p>
@@ -111,7 +111,7 @@ export default function ContactPage() {
             <nav aria-label="Connect with Silas" className="flex flex-wrap items-center gap-4">
               {[
                 { icon: FaEnvelope, title: "Email Silas", href: "mailto:osunbasilas@gmail.com" },
-                { icon: FaGithub, title: "GitHub", href: "https://github.com/TolaniSilas" },
+                { icon: FaGithub, title: "GitHub", href: "https://github.com/silasosunba" },
                 { icon: FaLinkedin, title: "LinkedIn", href: "https://www.linkedin.com/in/osunbasilas/" },
                 { icon: FaXTwitter, title: "X", href: "https://x.com/thaguymaxx" },
               ].map(({ icon: Icon, title, href }) => (
