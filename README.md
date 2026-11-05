@@ -1,6 +1,6 @@
 # Silas Osunba's portfolio
 
-A Next.js portfolio deployed from GitHub to **Cloudflare Workers** using OpenNext. News, Projects, Writings, and Books are managed through the owner-only `/admin` dashboard and rendered on the server from Supabase. Writings link to Medium. Visitors do not need accounts.
+A Next.js portfolio deployed from GitHub to **Cloudflare Workers** using OpenNext. News, Projects, Writings, and Books are managed through the owner-only `/admin` dashboard and rendered on the server from Supabase. Writings can link to Medium or be published as full articles on this website. Visitors do not need accounts.
 
 The app keeps SSR, React Server Components, Server Actions, cookie-based Supabase authentication, publishing, private image uploads, and the browser-based EmailJS contact form. It is not a static export. Images, CSS, JavaScript, and downloadable PDFs remain included.
 
@@ -116,3 +116,7 @@ npm run build:cloudflare
 The Cloudflare build includes the standard Next.js production build. Local Workers verification should cover public page rendering, unauthenticated admin redirects, invalid recovery links, private media denial, static JS/PDF delivery, and a Server Action POST. With real service configuration, also verify owner login, password recovery, uploads, draft saves, publication/unpublication, deletion, and actual EmailJS delivery. Embedded database tests validate owner policies but cannot replace those hosted-service checks.
 
 Setup verification passed all 19 tests, type generation, type checking, linting, the Next.js/OpenNext build, and local Workers HTTP checks. The local preview used no real Supabase credentials; CMS pages showed their unavailable state. Placeholder-only runtime bindings were used to check middleware redirects, and a blank login POST checked Server Action validation. Live owner login, database publishing/uploads, recovery email delivery, and EmailJS delivery were not tested. Dependency installation reported 18 audit findings (1 low, 8 moderate, 9 high); no force-upgrades were applied.
+
+### In-app writings
+
+Apply `portfolio/supabase/008_in_app_writings.sql`, then `portfolio/supabase/009_visual_writing_formatting.sql`, after migration 007 before deploying this feature. In `/admin` → Writings, choose **On Medium** for an external link or **On this website** for a full article with a shareable `/articles/[slug]` URL. In-app articles use a visual formatting editor. Writings display newest first by publication date; other sections retain manual ordering. Draft privacy, private image uploads, and owner authorization are preserved. See the [CMS guide](portfolio/supabase/README.md#enabling-in-app-writings-on-an-existing-deployment) for setup and verification.

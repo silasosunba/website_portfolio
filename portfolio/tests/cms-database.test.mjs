@@ -33,6 +33,8 @@ async function setup() {
   await db.exec(await readSql('005_portfolio_cms.sql'));
   await db.exec(await readSql('006_initial_content.sql'));
   await db.exec(await readSql('007_content_ordering.sql'));
+  await db.exec(await readSql('008_in_app_writings.sql'));
+  await db.exec(await readSql('009_visual_writing_formatting.sql'));
   return db;
 }
 async function asRole(db, role, user, fn) {
@@ -210,4 +212,149 @@ test('ordered CMS mutations are atomic, owner-only, and detect stale lists', asy
       });
     });
   } finally { await db.close(); }
+});
+
+
+test('dual publishing preserves Medium entries and protects in-app writings and images', async t => {
+  const db = await setup();
+  const path = `${owner}/30000000-0000-4000-8000-000000000001.png`;
+  const body = { version: 1, blocks: [
+    { type: 'heading', level: 2, text: 'Research notes' },
+    { type: 'paragraph', children: [{ text: 'Read ' }, { text: 'more', href: 'https://example.com', italic: true }] },
+    { type: 'list', ordered: false, items: ['One', 'Two'] },
+    { type: 'quote', text: 'Build carefully.' },
+    { type: 'image', image_path: path, alt: 'An experiment', caption: 'Research in progress' },
+  ] };
+  let id;
+  try {
+    await t.test('migration is idempotent and retains the existing Medium article and URL', async () => {
+      const before = (await db.query('select * from portfolio_articles')).rows;
+      await db.exec(await readSql('008_in_app_writings.sql'));
+      assert.deepEqual((await db.query('select * from portfolio_articles')).rows, before);
+      assert.equal(before[0].publication_type, 'medium');
+      assert.match(before[0].url, /^https:\/\/medium\.com/);
+      assert.equal(before[0].slug, null);
+    });
+    await t.test('owner can save an in-app draft through the atomic CMS mutation', async () => {
+      await asRole(db, 'authenticated', owner, async () => {
+        await db.query("insert into storage.objects (bucket_id,name) values ('portfolio-media',$1)", [path]);
+        const current = (await db.query('select id,version from portfolio_articles')).rows;
+        const values = { title: 'My article', published: false, position: 0, image_url: '/images/cover.png', excerpt: 'My research', date_value: '2026-11-04', reading_minutes: 1, publication_type: 'in-app', slug: 'my-article', url: '', body };
+        const { rows } = await db.query("select public.portfolio_mutate_ordered('articles','save',$1::jsonb,$2::jsonb) as entries", [JSON.stringify(current), JSON.stringify(values)]);
+        id = rows[0].entries.find(row => row.slug === 'my-article').id;
+        assert.ok(id);
+      });
+    });
+    await t.test('draft text and body images are invisible to anonymous visitors and non-owners', async () => {
+      for (const [role,user] of [['anon',null],['authenticated',stranger]]) await asRole(db, role, user, async () => {
+        assert.equal((await db.query("select * from portfolio_articles where slug='my-article'")).rows.length, 0);
+        assert.equal((await db.query('select * from storage.objects where name=$1', [path])).rows.length, 0);
+      });
+      await asRole(db,'authenticated',owner,async () => assert.equal((await db.query('select * from storage.objects where name=$1',[path])).rows.length,1));
+    });
+    await t.test('publishing, unpublishing, and deleting control access to the article and inline images', async () => {
+      for (const published of [true,false,true]) {
+        await asRole(db,'authenticated',owner,async () => db.query('update portfolio_articles set published=$1 where id=$2',[published,id]));
+        await asRole(db,'anon',null,async () => {
+          const rows = (await db.query("select * from portfolio_articles where slug='my-article' and publication_type='in-app' and published")).rows;
+          assert.equal(rows.length,published ? 1 : 0);
+          if (published) assert.deepEqual(rows[0].body,body);
+          assert.equal((await db.query('select * from storage.objects where name=$1',[path])).rows.length,published ? 1 : 0);
+        });
+      }
+      await asRole(db,'authenticated',owner,async () => db.query('delete from portfolio_articles where id=$1',[id]));
+      await asRole(db,'anon',null,async () => assert.equal((await db.query('select * from storage.objects where name=$1',[path])).rows.length,0));
+    });
+    await t.test('database rejects malformed, unsafe, empty published content and duplicate slugs', async () => {
+      await asRole(db,'authenticated',owner,async () => {
+        const create = (slug, value, published = true) => db.query("insert into portfolio_articles (title,excerpt,date_value,reading_minutes,image_url,url,publication_type,slug,body,published) values ('Article','Excerpt','2026-11-04',1,'/images/cover.png','','in-app',$1,$2::jsonb,$3)",[slug,JSON.stringify(value),published]);
+        for (const invalid of [
+          { version: 1, blocks: [] },
+          { version: 1, blocks: [{ type: 'html', html: '<script />' }] },
+          { version: 1, blocks: [{ type: 'paragraph', children: [{ text: 'Bad', href: 'javascript:alert(1)' }] }] },
+          { version: 1, blocks: [...body.blocks, { type: 'image', image_path: '../secret.svg', alt: 'Bad', caption: '' }] },
+        ]) await assert.rejects(create('invalid',invalid));
+        await assert.rejects(create('../bad',body));
+        await create('unique-slug',body);
+        await assert.rejects(create('unique-slug',body),/unique/);
+        // Switching back to Medium must not expose an old private in-app body.
+        await assert.rejects(db.query("update portfolio_articles set publication_type='medium',slug=null,url='https://medium.com/@silas/story' where slug='unique-slug'"));
+      });
+    });
+  } finally { await db.close(); }
+});
+
+
+test('visual writing formatting validates, survives storage, and keeps date-first ordering', async t => {
+  const db = await setup();
+  const body={version:1,blocks:[
+    {type:'heading',level:2,text:'A heading',children:[{text:'A heading',bold:true}]},
+    {type:'paragraph',children:[{text:'A paragraph',italic:true}]},
+    {type:'quote',text:'A quote',children:[{text:'A quote',href:'https://example.com/'}]},
+    {type:'list',ordered:false,items:['First item'],item_spans:[[{text:'First ',bold:true},{text:'item',italic:true}]]},
+  ]};
+  try {
+    await t.test('migration is idempotent and formatted text is preserved by atomic saves',async () => {
+      await db.exec(await readSql('009_visual_writing_formatting.sql'));
+      await asRole(db,'authenticated',owner,async () => {
+        const values={title:'Formatted writing',excerpt:'My notes',date_value:'2026-11-04',reading_minutes:1,published:true,position:0,image_url:'/images/cover.png',url:'',publication_type:'in-app',slug:'formatted',body};
+        const current=(await db.query('select id,version from portfolio_articles')).rows;
+        const saved=(await db.query("select public.portfolio_mutate_ordered('articles','save',$1::jsonb,$2::jsonb) as entries",[JSON.stringify(current),JSON.stringify(values)])).rows[0].entries;
+        assert.deepEqual(saved.find(row=>row.slug==='formatted').body,body);
+      });
+      await db.exec(await readSql('009_visual_writing_formatting.sql'));
+      await asRole(db,'anon',null,async () => assert.deepEqual((await db.query("select body from portfolio_articles where slug='formatted'")).rows[0].body,body));
+    });
+    await t.test('formatting cannot hide unsafe links or disagree with its plain text',async () => {
+      await asRole(db,'authenticated',owner,async () => {
+        const invalid=structuredClone(body); invalid.blocks[0].children[0].href='javascript:alert(1)';
+        await assert.rejects(db.query("update portfolio_articles set body=$1::jsonb where slug='formatted'",[JSON.stringify(invalid)]));
+        const mismatch=structuredClone(body); mismatch.blocks[3].item_spans[0][0].text='Different';
+        await assert.rejects(db.query("update portfolio_articles set body=$1::jsonb where slug='formatted'",[JSON.stringify(mismatch)]));
+      });
+    });
+    await t.test('publication date takes priority over manual order and creation time',async () => {
+      await db.query("update portfolio_articles set position=99,created_at='2020-01-01' where slug='formatted'");
+      await db.query("update portfolio_articles set position=0,created_at='2026-11-04' where publication_type='medium'");
+      const rows=(await db.query('select slug from portfolio_articles where published order by date_value desc,created_at desc,id')).rows;
+      assert.equal(rows[0].slug,'formatted');
+    });
+  } finally { await db.close(); }
+});
+
+
+test('GitHub username migration updates current CMS content without altering other accounts or Medium',async()=>{
+  const db=await setup();
+  const legacy='https://github.com/TolaniSilas';
+  const updated='https://github.com/silasosunba';
+  try{
+    const beforeProject=(await db.query("select * from portfolio_projects where seed_key='project-1'")).rows[0];
+    const medium=(await db.query("select url from portfolio_articles where publication_type='medium' limit 1")).rows[0].url;
+    const newsBody={version:1,blocks:[{type:'paragraph',children:[{text:'QueryMate',href:`${legacy}/Query-Mate?tab=readme#setup`,bold:true}]}]};
+    await db.query("update portfolio_news set body=$1::jsonb where seed_key='news-querymate-talk'",[JSON.stringify(newsBody)]);
+    await db.query("update portfolio_projects set link_url=$1,code_url=$2,demo_url=$3 where seed_key='project-1'",[`${legacy}/Computer-Vision-Research`,`${legacy.toLowerCase()}/Computer-Vision-Research/tree/main`,`${legacy}Other/demo`]);
+    await db.query("insert into portfolio_books (title,body,url,published) values ('GitHub book',$1,$2,false)",[`Read ${legacy}.`,legacy]);
+    const writingBody={version:1,blocks:[{type:'paragraph',children:[{text:'My GitHub',href:legacy}]},{type:'heading',level:2,text:legacy,children:[{text:legacy,bold:true}]}]};
+    await db.query("insert into portfolio_articles (title,excerpt,date_value,reading_minutes,published,publication_type,slug,url,body) values ('Private writing','Excerpt','2026-11-05',1,false,'in-app','github-update','',$1::jsonb)",[JSON.stringify(writingBody)]);
+    await db.exec(await readSql('010_github_username.sql'));
+    const project=(await db.query("select * from portfolio_projects where seed_key='project-1'")).rows[0];
+    assert.equal(project.link_url,`${updated}/Computer-Vision-Research`);
+    assert.equal(project.code_url,`${updated}/Computer-Vision-Research/tree/main`);
+    assert.equal(project.demo_url,`${legacy}Other/demo`);
+    assert.equal(project.position,beforeProject.position);
+    assert.equal(project.published,beforeProject.published);
+    assert.equal((await db.query("select body from portfolio_news where seed_key='news-querymate-talk'")).rows[0].body.blocks[0].children[0].href,`${updated}/Query-Mate?tab=readme#setup`);
+    const book=(await db.query("select * from portfolio_books where title='GitHub book'")).rows[0];
+    assert.equal(book.url,updated);assert.equal(book.body,`Read ${updated}.`);assert.equal(book.published,false);
+    const article=(await db.query("select * from portfolio_articles where slug='github-update'")).rows[0];
+    assert.equal(article.body.blocks[0].children[0].href,updated);
+    assert.equal(article.body.blocks[1].text,updated);
+    assert.equal(article.body.blocks[1].children[0].text,updated);
+    assert.equal(article.published,false);
+    assert.equal((await db.query("select url from portfolio_articles where publication_type='medium' limit 1")).rows[0].url,medium);
+    const versions=async()=> (await db.query("select id,version from portfolio_projects union all select id,version from portfolio_news union all select id,version from portfolio_articles union all select id,version from portfolio_books order by id")).rows;
+    const current=await versions();
+    await db.exec(await readSql('010_github_username.sql'));
+    assert.deepEqual(await versions(),current);
+  }finally{await db.close();}
 });
