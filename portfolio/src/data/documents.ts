@@ -1,3 +1,5 @@
+import { documentUrl } from '../lib/cms/documents';
+
 export type PortfolioDocument = {
   label: string;
   description: string;
@@ -6,8 +8,8 @@ export type PortfolioDocument = {
   downloadUrl: string;
 };
 
-const resumeUrl = '/documents/Silas_Osunba_Resume.pdf';
-const cvUrl = '/documents/Silas_Osunba_Academic_CV.pdf';
+const resumeUrl = documentUrl('resume');
+const cvUrl = documentUrl('cv');
 
 export const documents: Record<'resume' | 'cv', PortfolioDocument | null> = {
   resume: {
@@ -15,13 +17,13 @@ export const documents: Record<'resume' | 'cv', PortfolioDocument | null> = {
     description: 'Professional experience and applied engineering work.',
     previewUrl: resumeUrl,
     openUrl: resumeUrl,
-    downloadUrl: resumeUrl,
+    downloadUrl: documentUrl('resume', true),
   },
   cv: {
     label: 'Academic CV',
     description: 'Research, publications, and academic experience.',
     previewUrl: cvUrl,
     openUrl: cvUrl,
-    downloadUrl: cvUrl,
+    downloadUrl: documentUrl('cv', true),
   },
 };

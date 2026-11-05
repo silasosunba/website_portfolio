@@ -23,7 +23,7 @@ export default function DocumentViewer({ onNavigate }: { onNavigate: () => void 
     return () => { window.document.body.style.overflow = previous; };
   }, [open]);
 
-  function selectTab(tab: Tab) { setActive(tab); setLoaded(false); }
+  function selectTab(tab: Tab) { if (tab !== active) { setActive(tab); setLoaded(false); } }
   function moveTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let next: number;
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') next = 1 - index;
@@ -37,7 +37,7 @@ export default function DocumentViewer({ onNavigate }: { onNavigate: () => void 
 
   return <>
     <button ref={trigger} type="button" aria-haspopup="dialog" aria-controls="document-viewer" className="inline-flex items-center gap-2 rounded-full px-2 py-2 text-sm text-muted hover:text-accent dark:text-muted-dark dark:hover:text-gold" onClick={() => {
-      selectTab('resume'); dialog.current?.showModal(); setOpen(true);
+      setActive('resume'); setLoaded(false); dialog.current?.showModal(); setOpen(true);
     }}><FaFileAlt aria-hidden="true" /> CV</button>
     <dialog ref={dialog} id="document-viewer" className="document-dialog" aria-labelledby="document-viewer-title" onClose={() => { setOpen(false); trigger.current?.focus(); }} onClick={event => {
       if (event.target !== event.currentTarget) return;
@@ -64,7 +64,7 @@ export default function DocumentViewer({ onNavigate }: { onNavigate: () => void 
         </div>)}
         <div className="document-actions">
           <a href="mailto:osunbasilas@gmail.com?subject=Hiring%20Opportunity" className="btn-secondary" onClick={() => { dialog.current?.close(); onNavigate(); }}>Hire me</a>
-          {document && <a href={document.downloadUrl} target="_blank" rel="noopener noreferrer" className="btn-primary"><FaDownload aria-hidden="true" /> Download {document.label}</a>}
+          {document && <a download href={document.downloadUrl} target="_blank" rel="noopener noreferrer" className="btn-primary"><FaDownload aria-hidden="true" /> Download {document.label}</a>}
         </div>
       </div>
     </dialog>
